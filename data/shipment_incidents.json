@@ -1,6 +1,106 @@
 [
   {
     "news": {
+      "title": "S. Union attack brings Red Sea shipping crisis back to fore",
+      "url": "https://www.rusi.org/explore-our-research/publications/commentary/sounion-attack-brings-red-sea-shipping-crisis-back-fore",
+      "date": "unknown",
+      "news_location": "unknown"
+    },
+    "incident_location": {
+      "name": "Red Sea",
+      "geo_coordinates": {
+        "latitude": 20,
+        "longitude": 38
+      }
+    },
+    "incident_duration": 7,
+    "significance": 8,
+    "affected_ports": [
+      {
+        "port_name": "Port Sudan",
+        "port_code": "SDPSN"
+      },
+      {
+        "port_name": "Jeddah Islamic Port",
+        "port_code": "SAJED"
+      },
+      {
+        "port_name": "Port of Safaga",
+        "port_code": "EGSAF"
+      },
+      {
+        "port_name": "Suez Canal Container Terminal",
+        "port_code": "EGSCX"
+      },
+      {
+        "port_name": "Massawa Port",
+        "port_code": "ERMSA"
+      },
+      {
+        "port_name": "Assab Port",
+        "port_code": "ERASA"
+      },
+      {
+        "port_name": "Aqaba",
+        "port_code": "JOAQB"
+      }
+    ],
+    "impact_description": "Attacks in the Red Sea disrupt shipping routes causing delays and potential rerouting through alternative ports like those in the Gulf of Aden and the Suez Canal. Ports in the immediate vicinity, such as Port Sudan and Jeddah, are directly impacted by increased risks, while ports along the affected shipping routes, including major regional hubs like Suez Canal Container Terminal and Aqaba, face congestion and delays."
+  },
+  {
+    "news": {
+      "title": "Maersk faces acute port congestion in the Mediterranean & Asia causing vessel delays",
+      "url": "https://www.marineinsight.com/shipping-news/maersk-faces-acute-port-congestion-in-the-mediterranean-asia-causing-vessel-delays/",
+      "date": "unknown",
+      "news_location": "unknown"
+    },
+    "incident_location": {
+      "name": "Mediterranean & Asia",
+      "geo_coordinates": {
+        "latitude": 35,
+        "longitude": 25
+      }
+    },
+    "incident_duration": 14,
+    "significance": 7,
+    "affected_ports": [
+      {
+        "port_name": "Port of Piraeus",
+        "port_code": "GRPIU"
+      },
+      {
+        "port_name": "Port of Valencia",
+        "port_code": "ESVLC"
+      },
+      {
+        "port_name": "Port of Algeciras",
+        "port_code": "ESALG"
+      },
+      {
+        "port_name": "Port of Rotterdam",
+        "port_code": "NLRTM"
+      },
+      {
+        "port_name": "Port of Shanghai",
+        "port_code": "CNSHA"
+      },
+      {
+        "port_name": "Port of Ningbo",
+        "port_code": "CNNGB"
+      },
+      {
+        "port_name": "Port of Singapore",
+        "port_code": "SGSIN"
+      },
+      {
+        "port_name": "Port of Hong Kong",
+        "port_code": "CNHKG"
+      }
+    ],
+    "impact_description": "Severe port congestion in the Mediterranean and Asia leads to significant vessel delays.  Major ports like Piraeus, Valencia, Algeciras, and Rotterdam in the Mediterranean, and Shanghai, Ningbo, Singapore, and Hong Kong in Asia experience increased waiting times and reduced efficiency.  This congestion impacts shipping schedules and cargo delivery timelines for numerous shipping lines."
+  },
+  {
+    "news": {
       "title": "Glitches in new terminal operating systems spark delays at South India ports",
       "url": "https://theloadstar.com/glitches-in-new-terminal-operating-systems-spark-delays-at-south-india-ports/",
       "date": "unknown",
@@ -9,34 +109,30 @@
     "incident_location": {
       "name": "South India Ports",
       "geo_coordinates": {
-        "latitude": 13,
-        "longitude": 79
+        "latitude": 12,
+        "longitude": 78
       }
     },
-    "incident_duration": 7,
-    "significance": 7,
+    "incident_duration": 5,
+    "significance": 6,
     "affected_ports": [
       {
         "port_name": "Chennai Port",
-        "port_code": "INXXX"
+        "port_code": "INMAA"
       },
       {
         "port_name": "Tuticorin Port",
-        "port_code": "INTUC"
+        "port_code": "INTUT"
       },
       {
         "port_name": "Cochin Port",
-        "port_code": "INCO"
+        "port_code": "INCOI"
       },
       {
         "port_name": "Visakhapatnam Port",
-        "port_code": "INVIS"
-      },
-      {
-        "port_name": "Mangalore Port",
-        "port_code": "INMNG"
+        "port_code": "INVSX"
       }
     ],
-    "impact_description": "Glitches in newly implemented terminal operating systems at multiple South Indian ports caused delays of up to a week.  Ports like Chennai, Tuticorin, Cochin, Visakhapatnam and Mangalore faced operational slowdowns affecting cargo handling and vessel schedules."
+    "impact_description": "Technical glitches in newly implemented terminal operating systems at several South Indian ports cause significant delays. Ports such as Chennai, Tuticorin, Cochin, and Visakhapatnam experience disruptions in cargo handling and vessel operations, leading to delays in shipments and potential congestion."
   }
 ]
