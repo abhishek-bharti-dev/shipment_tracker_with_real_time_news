@@ -111,10 +111,6 @@ npm start
 
 This project is licensed under the ISC License.
 
-## Author
-
-[Your Name]
-
 ## Acknowledgments
 
 - Google AI for providing the Generative AI capabilities
