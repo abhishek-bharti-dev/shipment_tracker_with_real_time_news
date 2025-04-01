@@ -1,0 +1,42 @@
+[
+  {
+    "isIncident": true,
+    "port": {
+      "name": "Major Ports in India",
+      "location": "India",
+      "coordinates": "unknown"
+    },
+    "disruption": {
+      "type": "strike",
+      "cause": "Wage revision and PLR settlements delay",
+      "startDate": "2024-12-17",
+      "endDate": "unknown",
+      "duration": "unknown",
+      "significance": "moderate"
+    },
+    "severity": "6",
+    "impact": {
+      "area": "India",
+      "date": {
+        "occurred": "unknown",
+        "reported": "2024-11-26"
+      },
+      "operations": {
+        "status": "unknown",
+        "waitingTimes": "unknown",
+        "canceledSailings": "unknown",
+        "rerouting": "unknown"
+      },
+      "ships": {
+        "count": "unknown",
+        "types": [
+          "unknown"
+        ]
+      },
+      "cargo": [
+        "unknown"
+      ]
+    },
+    "url": "https://infra.economictimes.indiatimes.com/news/ports-shipping/major-port-workers-unions-call-for-strike-from-december-17-as-wage-revision-and-plr-settlements-face-delay/115603540"
+  }
+]
