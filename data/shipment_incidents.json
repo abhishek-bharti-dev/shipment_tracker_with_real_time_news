@@ -1,42 +1,42 @@
 [
   {
-    "isIncident": true,
-    "port": {
-      "name": "Major Ports in India",
-      "location": "India",
-      "coordinates": "unknown"
+    "news": {
+      "title": "Glitches in new terminal operating systems spark delays at South India ports",
+      "url": "https://theloadstar.com/glitches-in-new-terminal-operating-systems-spark-delays-at-south-india-ports/",
+      "date": "unknown",
+      "news_location": "South India"
     },
-    "disruption": {
-      "type": "strike",
-      "cause": "Wage revision and PLR settlements delay",
-      "startDate": "2024-12-17",
-      "endDate": "unknown",
-      "duration": "unknown",
-      "significance": "moderate"
+    "incident_location": {
+      "name": "South India Ports",
+      "geo_coordinates": {
+        "latitude": 13,
+        "longitude": 79
+      }
     },
-    "severity": "6",
-    "impact": {
-      "area": "India",
-      "date": {
-        "occurred": "unknown",
-        "reported": "2024-11-26"
+    "incident_duration": 7,
+    "significance": 7,
+    "affected_ports": [
+      {
+        "port_name": "Chennai Port",
+        "port_code": "INXXX"
       },
-      "operations": {
-        "status": "unknown",
-        "waitingTimes": "unknown",
-        "canceledSailings": "unknown",
-        "rerouting": "unknown"
+      {
+        "port_name": "Tuticorin Port",
+        "port_code": "INTUC"
       },
-      "ships": {
-        "count": "unknown",
-        "types": [
-          "unknown"
-        ]
+      {
+        "port_name": "Cochin Port",
+        "port_code": "INCO"
       },
-      "cargo": [
-        "unknown"
-      ]
-    },
-    "url": "https://infra.economictimes.indiatimes.com/news/ports-shipping/major-port-workers-unions-call-for-strike-from-december-17-as-wage-revision-and-plr-settlements-face-delay/115603540"
+      {
+        "port_name": "Visakhapatnam Port",
+        "port_code": "INVIS"
+      },
+      {
+        "port_name": "Mangalore Port",
+        "port_code": "INMNG"
+      }
+    ],
+    "impact_description": "Glitches in newly implemented terminal operating systems at multiple South Indian ports caused delays of up to a week.  Ports like Chennai, Tuticorin, Cochin, Visakhapatnam and Mangalore faced operational slowdowns affecting cargo handling and vessel schedules."
   }
 ]

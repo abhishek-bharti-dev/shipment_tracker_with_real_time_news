@@ -19,65 +19,62 @@ async function analyzeNewsLinks() {
 
         const prompt = `Analyze these news article URLs and identify any shipping incidents. Extract the following information for each incident:
 
-1. Affected Port(s):
+1. News Information:
+   - Title of the article
+   - URL
+   - Publication date
+   - News location
+
+2. Incident Location:
+   - Name of the location
+   - Geographic coordinates (latitude, longitude)
+
+3. Incident Details:
+   - Duration in days (if not mentioned, think of yourself how much delay it can cause)
+   - Significance rating (out of 10)
+
+4. Affected Ports (CRITICAL - List ALL ports that could be impacted):
+   For each incident, carefully analyze and list:
+   - All ports in the immediate vicinity of the incident
+   - Ports along the affected shipping routes
+   - Ports that handle similar cargo or trade routes
+   - Ports that serve as alternative routes
+   - Major ports in the affected region
+   For each port include:
    - Port name
-   - Location (city/region/country)
-   - Coordinates (latitude, longitude)
+   - Port code (if available)
+   - If port code is not available, use "UNKNOWN"
 
-2. Disruption Details:
-   - Type: port_closure, weather, accident, strike, geopolitical, other
-   - Cause: specific reason (e.g., labor strike, flooding, typhoon)
-   - start date: start date of disruption
-   - end date: expected end date
-   - Duration: possibel duration of disruption
-   - Significance: minor, moderate, or severe
-
-3. Impact Information:
-   - Affected Area: broader region or trade route
-   - Date: when incident occurred/reported
-   - Operational Impact: waiting times, canceled sailings, rerouting
-   - Ships Affected: number and types of vessels
-   - Cargo Impacted: specific goods or industries
-   - Port Status: current operational status
+5. Impact Description:
+   - Brief description of the impact on shipping operations
+   - Include specific mention of which ports are affected and how
 
 Return a JSON object with an array of incidents in this format:
 {
     "incidents": [
         {
-            "isIncident": true,
-            "port": {
-                "name": "Port Name",
-                "location": "City/Region/Country",
-                "coordinates": "Latitude, Longitude"
+            "news": {
+                "title": "Article Title",
+                "url": "Article URL",
+                "date": "YYYY-MM-DDTHH:mm:ssZ",
+                "news_location": "Location"
             },
-            "disruption": {
-                "type": "port_closure/weather/accident/strike/geopolitical/other",
-                "cause": "Specific reason for disruption",
-                "startDate": "YYYY-MM-DD",
-                "endDate": "YYYY-MM-DD",
-                "duration": "Possible duration of disruption",
-                "significance": "minor/moderate/severe"
+            "incident_location": {
+                "name": "Location Name",
+                "geo_coordinates": {
+                    "latitude": 0.0,
+                    "longitude": 0.0
+                }
             },
-            "severity": "Provide me data out of 10",
-            "impact": {
-                "area": "Affected region or trade route",
-                "date": {
-                    "occurred": "YYYY-MM-DD",
-                    "reported": "YYYY-MM-DD"
-                },
-                "operations": {
-                    "status": "Current port status",
-                    "waitingTimes": "Average waiting time",
-                    "canceledSailings": "Number of canceled sailings",
-                    "rerouting": "Rerouting information if any"
-                },
-                "ships": {
-                    "count": "Number of affected ships",
-                    "types": ["Container Ships", "Bulk Carriers", etc.]
-                },
-                "cargo": ["Electronics", "Perishables", etc.]
-            },
-            "url": "Article URL"
+            "incident_duration": 0,
+            "significance": 0,
+            "affected_ports": [
+                {
+                    "port_name": "Port Name",
+                    "port_code": "PORTCODE"
+                }
+            ],
+            "impact_description": "Description of impact"
         }
     ]
 }
@@ -85,9 +82,17 @@ Return a JSON object with an array of incidents in this format:
 Rules:
 1. Return ONLY the JSON object, no additional text
 2. Include ALL articles mentioning any shipment-related incidents
-3. Set isIncident to true for any article mentioning port issues, shipping delays, or cargo problems
-4. Use "unknown" for any missing information
-5. If no incidents found, return {"incidents": []}
+3. Use "unknown" for any missing information
+4. If no incidents found, return {"incidents": []}
+5. Duration should be in days
+6. Significance should be rated out of 10
+7. For affected_ports:
+   - ALWAYS include at least one port if the incident is significant (significance > 5)
+   - Include ALL potentially affected ports, not just the most obvious ones
+   - Consider both direct and indirect impacts on ports
+   - Include ports that might be affected due to rerouting or congestion
+   - If port code is unknown, use "UNKNOWN" instead of omitting it
+8. The impact_description should clearly explain which ports are affected and why
 
 News article URLs to analyze:
 ${JSON.stringify(links, null, 2)}`;
