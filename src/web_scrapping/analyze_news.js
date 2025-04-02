@@ -30,8 +30,17 @@ async function analyzeNewsLinks() {
    - Geographic coordinates (latitude, longitude)
 
 3. Incident Details:
-   - Duration in days (if not mentioned, think of yourself how much delay it can cause)
+   - Duration in days (if not explicitly mentioned in the article):
+     * Consider historical data of similar incidents
+     * Factor in the type of incident (e.g., weather, mechanical, labor strike)
+     * Account for the scale and complexity of the incident
+     * Include time for investigation, repairs, and return to normal operations
+     * Consider seasonal factors and current shipping conditions
+     * Provide a realistic range if exact duration is uncertain
    - Significance rating (out of 10)
+   - Issue Type: Specify whether this is a "sea" or "port" issue
+     * For sea issues: Only provide coordinates of the incident location
+     * For port issues: Provide both port details and coordinates
 
 4. Affected Ports (CRITICAL - List ALL ports that could be impacted):
    For each incident, carefully analyze and list:
@@ -66,6 +75,7 @@ Return a JSON object with an array of incidents in this format:
                     "longitude": 0.0
                 }
             },
+            "is_sea_port_issue": "sea",  // or "port"
             "incident_duration": 0,
             "significance": 0,
             "affected_ports": [
@@ -93,6 +103,11 @@ Rules:
    - Include ports that might be affected due to rerouting or congestion
    - If port code is unknown, use "UNKNOWN" instead of omitting it
 8. The impact_description should clearly explain which ports are affected and why
+9. For is_sea_port_issue:
+   - Use "sea" for incidents occurring in open waters, shipping lanes, or at sea
+   - Use "port" for incidents occurring within port facilities or port areas
+   - For sea issues, focus on providing accurate coordinates of the incident location
+   - For port issues, provide both port details and coordinates
 
 News article URLs to analyze:
 ${JSON.stringify(links, null, 2)}`;
