@@ -1,20 +1,14 @@
 const express = require('express');
 const router = express.Router();
 const shipmentController = require('../controllers/shipmentController');
+const { authenticate } = require('../security/authMiddleware');
 
-// Get all shipments
-router.get('/health_check', shipmentController.getAllShipments);
-
-// Get single shipment
-router.get('/:id', shipmentController.getShipment);
-
-// Create new shipment
-router.post('/', shipmentController.createShipment);
-
-// Update shipment
-router.put('/:id', shipmentController.updateShipment);
-
-// Delete shipment
-router.delete('/:id', shipmentController.deleteShipment);
+// All routes require authentication
+router.get('/health_check', authenticate, shipmentController.healthCheck);
+router.get('/', authenticate, shipmentController.getAllShipments);
+router.get('/:id', authenticate, shipmentController.getShipment);
+router.post('/', authenticate, shipmentController.createShipment);
+router.put('/:id', authenticate, shipmentController.updateShipment);
+router.delete('/:id', authenticate, shipmentController.deleteShipment);
 
 module.exports = router; 

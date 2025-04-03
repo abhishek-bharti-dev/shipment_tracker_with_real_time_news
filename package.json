@@ -6,7 +6,10 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
-    "scrape": "node src/web_scrapping/scrapper.js"
+    "scrape": "node src/web_scrapping/scrapper.js",
+    "server:start": "node scripts/server.js start",
+    "server:stop": "node scripts/server.js stop",
+    "server:restart": "node scripts/server.js restart"
   },
   "author": "",
   "license": "ISC",
@@ -14,6 +17,7 @@
   "dependencies": {
     "@google/generative-ai": "^0.24.0",
     "axios": "^1.8.4",
+    "bcryptjs": "^3.0.2",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "fs": "^0.0.1-security",

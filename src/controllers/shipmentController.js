@@ -1,8 +1,30 @@
 const Shipment = require('../models/Shipment');
+const mongoose = require('mongoose');
+
+// Health check endpoint
+exports.healthCheck = async (req, res) => {
+  try {
+    // Check if we can connect to the database
+    const dbStatus = mongoose.connection.readyState === 1 ? 'connected' : 'disconnected';
+    
+    res.status(200).json({
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      database: dbStatus,
+      message: 'Shipment service is healthy'
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: 'error',
+      message: 'Health check failed',
+      error: error.message
+    });
+  }
+};
 
 // Get all shipments
 exports.getAllShipments = async (req, res) => {
-  res.status(200).json("Shipments fetched successfully");
+  // res.status(200).json("Shipments fetched successfully");
   try {
     const shipments = await Shipment.find();
     res.status(200).json(shipments);
@@ -16,9 +38,9 @@ exports.getShipment = async (req, res) => {
   try {
     const shipment = await Shipment.findById(req.params.id);
     if (!shipment) {
-      return res.status(404).json({ message: 'Shipment not found' });
+      return res.status(404).json({ shipment});
     }
-    res.status(200).json("Shipment fetched successfully");
+    res.status(200).json(shipment);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
