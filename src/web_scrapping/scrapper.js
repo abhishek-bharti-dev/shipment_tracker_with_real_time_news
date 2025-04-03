@@ -2,6 +2,7 @@ const axios = require('axios');
 const xml2js = require('xml2js');
 const fs = require('fs');
 const path = require('path');
+const { analyzeNewsLinks } = require('./analyze_news');
 require('dotenv').config();
 
 const keywordsFile = path.join(__dirname, 'keywords.txt'); // Path to keywords
@@ -37,17 +38,22 @@ async function fetchGoogleNewsRSS() {
             fs.mkdirSync(dataDir, { recursive: true });
         }
 
-        // Write Links to JSON File
+        // Write Links to JSON File for logging
         const outputPath = path.join(dataDir, 'news_links.json');
         fs.writeFileSync(outputPath, JSON.stringify(allLinks, null, 2));
 
         console.log(`📊 News Statistics:`);
         console.log(`   • Total links fetched: ${totalLinks}`);
         console.log(`✅ Successfully stored news links in news_links.json`);
+
+        // Analyze the news links directly
+        console.log('\n🔍 Starting news analysis...');
+        const analysisResult = await analyzeNewsLinks(allLinks);
         
         return {
             totalLinks,
-            links: allLinks
+            links: allLinks,
+            analysis: analysisResult
         };
     } catch (error) {
         console.error('❌ Error fetching Google News RSS:', error.message);
