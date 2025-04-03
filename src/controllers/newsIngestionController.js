@@ -2,7 +2,7 @@ const newsIngestionService = require('../services/newsIngestionService');
 
 async function handleCreateNewsIngestion(req, res) {
     try {
-        console.log('Received news ingestion request:', req.body);
+        // console.log('Received news ingestion request:', req.body);
         
         // Validate request body
         if (!req.body || !Array.isArray(req.body)) {

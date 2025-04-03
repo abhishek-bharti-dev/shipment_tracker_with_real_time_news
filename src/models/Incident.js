@@ -25,11 +25,10 @@ const incidentSchema = new mongoose.Schema({
   },
   lat_lon: {
     type: [Number],
-    required: true,
     validate: {
       validator: function(v) {
         return Array.isArray(v) && v.length === 2 && 
-               typeof v[0] === 'number' && typeof v[1] === 'number';
+               typeof v[0] === 'number' && typeof v[1] === 'number' || v.length === 0;
       },
       message: props => `${props.value} is not a valid lat_lon array!`
     }
