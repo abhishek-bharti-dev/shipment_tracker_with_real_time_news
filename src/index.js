@@ -5,7 +5,6 @@ const mongoose = require('mongoose');
 const app = express();
 const port = process.env.PORT || 3000;
 const connectDB = require('./config/database');
-const shipmentRoutes = require('./routes/shipmentRoutes');
 const authRoutes = require('./routes/auth');
 const newsIngestionRoutes = require('./routes/newsIngestionRoutes');
 
@@ -33,9 +32,6 @@ app.get('/', (req, res) => {
 
 // Mount auth routes (signup and login are public, others require authentication)
 app.use('/api/auth', authRoutes);
-
-// Mount shipment routes (health check is public, others require authentication)
-app.use('/api/shipments', shipmentRoutes);
 
 // Mount news ingestion routes
 app.use('/api/news', newsIngestionRoutes);
