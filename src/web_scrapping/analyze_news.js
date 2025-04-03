@@ -8,12 +8,12 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
 // Function to analyze all news links using Gemini API
-async function analyzeNewsLinks() {
+async function analyzeNewsLinks(links) {
+    console.log(links);
     try {
-        // Read news links from file
-        const dataDir = path.join(__dirname, '../../data');
-        const linksPath = path.join(dataDir, 'news_links.json');
-        const links = JSON.parse(fs.readFileSync(linksPath, 'utf-8'));
+        if (!links || !Array.isArray(links) || links.length === 0) {
+            throw new Error('No valid links provided for analysis');
+        }
 
         console.log(`📊 Starting analysis of ${links.length} news articles...`);
 
@@ -112,7 +112,6 @@ Rules:
 News article URLs to analyze:
 ${JSON.stringify(links, null, 2)}`;
         
-        console.log(prompt);
         console.log('\n🤖 Sending to Gemini API for analysis...');
         const result = await model.generateContent(prompt);
         const response = await result.response;
@@ -131,6 +130,12 @@ ${JSON.stringify(links, null, 2)}`;
             
             const analysis = JSON.parse(cleanText);
             const incidents = analysis.incidents || [];
+
+            // Create data directory if it doesn't exist
+            const dataDir = path.join(__dirname, '../../data');
+            if (!fs.existsSync(dataDir)) {
+                fs.mkdirSync(dataDir, { recursive: true });
+            }
 
             // Save incidents to file
             const outputPath = path.join(dataDir, 'shipment_incidents.json');
@@ -166,7 +171,12 @@ module.exports = {
 // Only run if this file is executed directly
 if (require.main === module) {
     console.time('Analysis Time');
-    analyzeNewsLinks().then(() => {
+    // Read links from file if running directly
+    const dataDir = path.join(__dirname, '../../data');
+    const linksPath = path.join(dataDir, 'news_links.json');
+    const links = JSON.parse(fs.readFileSync(linksPath, 'utf-8'));
+    
+    analyzeNewsLinks(links).then(() => {
         console.timeEnd('Analysis Time');
     }).catch(error => {
         console.error('❌ Analysis failed:', error);

@@ -1,5 +1,6 @@
 const cron = require('node-cron');
 const { fetchGoogleNewsRSS } = require('../web_scrapping/scrapper');
+// Uncomment the analyzeNewsLinks import since we'll be using it
 const { analyzeNewsLinks } = require('../web_scrapping/analyze_news');
 
 class NewsPipelineScheduler {
@@ -24,11 +25,12 @@ class NewsPipelineScheduler {
 
             // Step 1: Fetch news links
             console.log('\n📰 Step 1: Fetching news links...');
-            await fetchGoogleNewsRSS();
+            const result = await fetchGoogleNewsRSS();
+            console.log(`📊 Fetched ${result.totalLinks} links`);
 
             // Step 2: Analyze news links
             console.log('\n🔍 Step 2: Analyzing news links...');
-            await analyzeNewsLinks();
+            await analyzeNewsLinks(result.links);
 
             console.log('\n✅ Pipeline completed successfully');
         } catch (error) {
@@ -45,7 +47,7 @@ class NewsPipelineScheduler {
         // Run immediately on startup
         this.runPipeline();
 
-        // Schedule regular runs
+        // Schedule regular runs at teh start of every hour
         cron.schedule('0 * * * *', () => {
             this.runPipeline();
         });
@@ -72,4 +74,4 @@ process.on('SIGTERM', () => {
     console.log('\n👋 Received SIGTERM. Shutting down gracefully...');
     scheduler.stop();
     process.exit(0);
-}); 
+});
