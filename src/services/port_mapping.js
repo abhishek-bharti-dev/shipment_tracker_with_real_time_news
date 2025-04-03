@@ -11,7 +11,7 @@ async function getAffectedPortIds() {
     // Connect to MongoDB with a separate try-catch for connection issues
     try {
       console.log('Attempting to connect to MongoDB...');
-      await mongoose.connect("mongodb+srv://abhishek:1234@cluster0.xyyvvsu.mongodb.net/shipment_tracker?retryWrites=true&w=majority&appName=Cluster0");
+      await mongoose.connect(process.env.DATABASE_URI);
       console.log('Successfully connected to MongoDB');
     } catch (connectionError) {
       console.error('Failed to connect to MongoDB:', connectionError.message);
@@ -27,14 +27,14 @@ async function getAffectedPortIds() {
     }
     
     // Check if the incident has affected port IDs
-    if (!incident.affected_port_ids || incident.affected_port_ids.length === 0) {
+    if (!incident.affected_ports || incident.affected_ports.length === 0) {
       console.log('No affected port IDs found for this incident');
       return;
     }
     
     // Console the affected port IDs
     console.log('Affected Port IDs:');
-    incident.affected_port_ids.forEach((id, index) => {
+    incident.affected_ports.forEach((id, index) => {
       console.log(`${index + 1}. ${id}`);
     });
     

@@ -10,11 +10,6 @@ function generateNewsHash(newsData) {
     return crypto.createHash('md5').update(contentToHash).digest('hex');
 }
 
-// Generate a unique ID for the news
-function generateNewsId() {
-    return crypto.randomBytes(16).toString('hex');
-}
-
 // Process a single news item
 async function processNewsItem(newsItem) {
     const session = await mongoose.startSession();
@@ -51,8 +46,7 @@ async function processNewsItem(newsItem) {
             };
         }
         
-        // Generate unique identifiers
-        const newsId = generateNewsId();
+        // Generate hash for duplicate checking
         const newsHash = generateNewsHash({ title, url, news_details });
         
         // Check if this news already exists
@@ -67,7 +61,6 @@ async function processNewsItem(newsItem) {
         
         // Create new news document
         const news = new News({
-            news_id: newsId,
             news_hash: newsHash,
             title,
             url,
@@ -106,9 +99,7 @@ async function processNewsItem(newsItem) {
                 
                 if (!port) {
                     // Create new port if it doesn't exist
-                    const portId = crypto.randomBytes(16).toString('hex');
                     port = new Port({
-                        port_id: portId,
                         port_code: portInfo.port_code,
                         port_name: portInfo.port_name,
                         lat_lon: coordinates || [] // Use empty array if coordinates are null
@@ -116,13 +107,11 @@ async function processNewsItem(newsItem) {
                     await port.save({ session });
                 }
                 
-                portIds.push(port.port_id);
+                portIds.push(port._id);
             }
         }
 
         // Create incident record
-        const incidentId = crypto.randomBytes(16).toString('hex');
-        
         // Validate coordinates for sea incidents
         if (newsItem.is_sea_port_issue === 'sea' && (!coordinates || coordinates.length === 0)) {
             await session.abortTransaction();
@@ -133,10 +122,9 @@ async function processNewsItem(newsItem) {
         }
         
         const incident = new Incident({
-            incident_id: incidentId,
-            source_news_id: newsId,
+            source_news: news._id,
             location_type: newsItem.is_sea_port_issue || 'sea',
-            affected_port_ids: portIds,
+            affected_ports: portIds,
             lat_lon: coordinates || [], // Use empty array if coordinates are null
             start_time: published_date,
             estimated_duration_days: newsItem.incident_duration || 1,
@@ -151,8 +139,8 @@ async function processNewsItem(newsItem) {
         
         return {
             success: true,
-            news_id: newsId,
-            incident_id: incidentId,
+            news_id: news._id,
+            incident_id: incident._id,
             title
         };
     } catch (error) {
@@ -203,7 +191,7 @@ async function processNewsItems(newsItems) {
 
 // Get news by ID
 async function getNewsById(newsId) {
-    return await News.findOne({ news_id: newsId });
+    return await News.findById(newsId);
 }
 
 // Get all news

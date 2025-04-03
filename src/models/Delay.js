@@ -1,26 +1,21 @@
 const mongoose = require('mongoose');
 
 const delaySchema = new mongoose.Schema({
-  delay_id: {
-    type: String,
-    required: true,
-    unique: true
-  },
-  shipment_id: {
-    type: String,
+  shipment: {
+    type: mongoose.Schema.Types.ObjectId,
     ref: 'VesselTracking',
     required: true
   },
-  port_id: {
-    type: String,
-    ref: 'Port',
+  port: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Port'
   },
   expected_delay_days: {
     type: Number,
     required: true
   },
-  incident_id: {
-    type: String,
+  incident: {
+    type: mongoose.Schema.Types.ObjectId,
     ref: 'Incident',
     required: true
   }

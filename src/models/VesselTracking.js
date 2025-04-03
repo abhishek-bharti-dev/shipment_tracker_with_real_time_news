@@ -21,7 +21,7 @@ const vesselTrackingSchema = new mongoose.Schema({
   },
   events: [{
     port: {
-      id: String,
+      id: mongoose.Schema.Types.ObjectId,
       name: String,
       code: String,
       country_code: String
@@ -52,7 +52,10 @@ const vesselTrackingSchema = new mongoose.Schema({
     vessel_event_planned_date: Date,
     shipload_event_actual_date: Date,
     vessel_event_actual_date: Date,
-    shipload_event_port_id: String,
+    shipload_event_port: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Port'
+    },
     distance_between_ports: Number,
     performed_at: Date
   }],

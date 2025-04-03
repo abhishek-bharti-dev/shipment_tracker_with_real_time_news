@@ -1,13 +1,8 @@
 const mongoose = require('mongoose');
 
 const incidentSchema = new mongoose.Schema({
-  incident_id: {
-    type: String,
-    required: true,
-    unique: true
-  },
-  source_news_id: {
-    type: String,
+  source_news: {
+    type: mongoose.Schema.Types.ObjectId,
     ref: 'News',
     required: true
   },
@@ -16,8 +11,8 @@ const incidentSchema = new mongoose.Schema({
     required: true,
     enum: ['port', 'sea']
   },
-  affected_port_ids: {
-    type: [String],
+  affected_ports: {
+    type: [mongoose.Schema.Types.ObjectId],
     ref: 'Port',
     required: function() {
       return this.location_type === 'port';

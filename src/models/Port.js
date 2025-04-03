@@ -1,14 +1,10 @@
 const mongoose = require('mongoose');
 
 const portSchema = new mongoose.Schema({
-  port_id: {
+  port_code: {
     type: String,
     required: true,
     unique: true
-  },
-  port_code: {
-    type: String,
-    required: true
   },
   port_name: {
     type: String,
