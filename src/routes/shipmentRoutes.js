@@ -1,17 +1,14 @@
 const express = require('express');
 const router = express.Router();
+const shipmentController = require('../controllers/shipmentController');
+const { authenticate } = require('../security/authMiddleware');
 
-// Import shipment controllers
-// const { handleCreateShipment, handleGetShipmentById, handleGetAllShipments } = require('../controllers/shipmentController');
-
-// Define routes
-// router.post('/', handleCreateShipment);
-// router.get('/:id', handleGetShipmentById);
-// router.get('/', handleGetAllShipments);
-
-// Temporary placeholder route
-router.get('/', (req, res) => {
-  res.json({ message: 'Shipment routes working' });
-});
+// All routes require authentication
+router.get('/health_check', authenticate, shipmentController.healthCheck);
+router.get('/', authenticate, shipmentController.getAllShipments);
+router.get('/:id', authenticate, shipmentController.getShipment);
+router.post('/', authenticate, shipmentController.createShipment);
+router.put('/:id', authenticate, shipmentController.updateShipment);
+router.delete('/:id', authenticate, shipmentController.deleteShipment);
 
 module.exports = router; 
