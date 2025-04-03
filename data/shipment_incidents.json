@@ -1,7 +1,7 @@
 [
   {
     "news": {
-      "title": "Sounion attack brings Red Sea shipping crisis back to fore",
+      "title": "S. Union attack brings Red Sea shipping crisis back to fore",
       "url": "https://www.rusi.org/explore-our-research/publications/commentary/sounion-attack-brings-red-sea-shipping-crisis-back-fore",
       "date": "unknown",
       "news_location": "unknown"
@@ -14,7 +14,7 @@
       }
     },
     "is_sea_port_issue": "sea",
-    "incident_duration": 7,
+    "incident_duration": 30,
     "significance": 7,
     "affected_ports": [
       {
@@ -34,32 +34,48 @@
         "port_code": "JOAQB"
       }
     ],
-    "impact_description": "The attack caused disruptions and uncertainty in the Red Sea shipping routes, potentially affecting ports like Port Sudan, Jeddah Islamic Port, Massawa Port, and Aqaba due to increased security concerns and potential rerouting of vessels."
+    "impact_description": "Attacks in the Red Sea disrupt shipping routes, impacting ports like Port Sudan, Jeddah Islamic Port, Massawa Port, and Aqaba due to increased security risks and potential delays.  Alternative routes might be considered, leading to congestion in other ports."
   },
   {
     "news": {
       "title": "Maersk faces acute port congestion in the Mediterranean & Asia causing vessel delays",
       "url": "https://www.marineinsight.com/shipping-news/maersk-faces-acute-port-congestion-in-the-mediterranean-asia-causing-vessel-delays/",
       "date": "unknown",
-      "news_location": "unknown"
+      "news_location": "Mediterranean & Asia"
     },
     "incident_location": {
-      "name": "Mediterranean and Asia Ports",
+      "name": "Various Mediterranean & Asian Ports",
       "geo_coordinates": {
         "latitude": "unknown",
         "longitude": "unknown"
       }
     },
     "is_sea_port_issue": "port",
-    "incident_duration": 30,
-    "significance": 8,
+    "incident_duration": 90,
+    "significance": 6,
     "affected_ports": [
       {
-        "port_name": "unknown",
-        "port_code": "UNKNOWN"
+        "port_name": "Port of Piraeus",
+        "port_code": "GRPI"
+      },
+      {
+        "port_name": "Port of Valencia",
+        "port_code": "ESVLC"
+      },
+      {
+        "port_name": "Port of Shanghai",
+        "port_code": "CNSHG"
+      },
+      {
+        "port_name": "Port of Singapore",
+        "port_code": "SGSIN"
+      },
+      {
+        "port_name": "Port of Busan",
+        "port_code": "KRPUS"
       }
     ],
-    "impact_description": "Port congestion in the Mediterranean and Asia caused significant vessel delays.  The specific ports affected are not listed but would include major container ports in both regions, leading to widespread delays and disruptions in shipping schedules."
+    "impact_description": "Port congestion in the Mediterranean and Asia causes vessel delays, affecting major ports like Piraeus, Valencia, Shanghai, Singapore, and Busan.  The impact includes longer waiting times, increased costs, and potential schedule disruptions for shipping companies."
   },
   {
     "news": {
@@ -71,13 +87,13 @@
     "incident_location": {
       "name": "South India Ports",
       "geo_coordinates": {
-        "latitude": 13,
+        "latitude": 12,
         "longitude": 78
       }
     },
     "is_sea_port_issue": "port",
     "incident_duration": 14,
-    "significance": 6,
+    "significance": 5,
     "affected_ports": [
       {
         "port_name": "Chennai Port",
@@ -85,13 +101,13 @@
       },
       {
         "port_name": "Tuticorin Port",
-        "port_code": "INTUC"
+        "port_code": "INTUT"
       },
       {
         "port_name": "Cochin Port",
         "port_code": "INCOI"
       }
     ],
-    "impact_description": "Technical glitches in new terminal operating systems caused delays at several South Indian ports, including Chennai, Tuticorin and Cochin, impacting cargo handling and vessel schedules."
+    "impact_description": "Technical glitches in new terminal operating systems at South India ports caused delays, impacting ports such as Chennai, Tuticorin, and Cochin. This resulted in reduced efficiency and vessel scheduling issues."
   }
 ]

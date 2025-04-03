@@ -1,20 +1,17 @@
 const express = require('express');
 const router = express.Router();
-const shipmentController = require('../controllers/shipmentController');
 
-// Get all shipments
-router.get('/health_check', shipmentController.getAllShipments);
+// Import shipment controllers
+// const { handleCreateShipment, handleGetShipmentById, handleGetAllShipments } = require('../controllers/shipmentController');
 
-// Get single shipment
-router.get('/:id', shipmentController.getShipment);
+// Define routes
+// router.post('/', handleCreateShipment);
+// router.get('/:id', handleGetShipmentById);
+// router.get('/', handleGetAllShipments);
 
-// Create new shipment
-router.post('/', shipmentController.createShipment);
-
-// Update shipment
-router.put('/:id', shipmentController.updateShipment);
-
-// Delete shipment
-router.delete('/:id', shipmentController.deleteShipment);
+// Temporary placeholder route
+router.get('/', (req, res) => {
+  res.json({ message: 'Shipment routes working' });
+});
 
 module.exports = router; 
