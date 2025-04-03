@@ -60,7 +60,6 @@ async function analyzeNewsLinks(links) {
 
 Return a JSON object with an array of incidents in this format:
 {
-    "incidents": [
         {
             "news": {
                 "title": "Article Title",
@@ -86,14 +85,13 @@ Return a JSON object with an array of incidents in this format:
             ],
             "impact_description": "Description of impact"
         }
-    ]
 }
 
 Rules:
 1. Return ONLY the JSON object, no additional text
 2. Include ALL articles mentioning any shipment-related incidents
 3. Use "unknown" for any missing information
-4. If no incidents found, return {"incidents": []}
+4. If no incidents found, return {{}}
 5. Duration should be in days
 6. Significance should be rated out of 10
 7. For affected_ports:
@@ -137,7 +135,7 @@ ${JSON.stringify(links, null, 2)}`;
                 fs.mkdirSync(dataDir, { recursive: true });
             }
 
-            // Save incidents to file
+            // Save incidents to file without the outer wrapper
             const outputPath = path.join(dataDir, 'shipment_incidents.json');
             fs.writeFileSync(outputPath, JSON.stringify(incidents, null, 2));
 
@@ -145,6 +143,14 @@ ${JSON.stringify(links, null, 2)}`;
             console.log(`   • Total articles analyzed: ${links.length}`);
             console.log(`   • Incidents detected: ${incidents.length}`);
             console.log(`✅ Incidents saved to shipment_incidents.json`);
+            
+            // //route the incidents to the news ingestion endpoint
+            const newsIngestionEndpoint = 'http://localhost:3000/new_incident';
+            const response = await fetch(newsIngestionEndpoint, {
+                method: 'POST',
+                body: JSON.stringify(incidents),
+            });
+            
 
             return {
                 totalArticles: links.length,

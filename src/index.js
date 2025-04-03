@@ -4,16 +4,13 @@ const express = require('express');
 const mongoose = require('mongoose');
 const app = express();
 const port = process.env.PORT || 3000;
+const connectDB = require('./config/database');
 const shipmentRoutes = require('./routes/shipmentRoutes');
 const authRoutes = require('./routes/auth');
+const newsIngestionRoutes = require('./routes/newsIngestionRoutes');
 
 // Connect to MongoDB
-mongoose.connect(process.env.DATABASE_URL || 'mongodb://localhost:27017/shipment_tracker')
-  .then(() => console.log('Connected to MongoDB'))
-  .catch(err => {
-    console.error('MongoDB connection error:', err);
-    process.exit(1);
-  });
+connectDB();
 
 // Middleware
 app.use(express.json());
@@ -39,6 +36,9 @@ app.use('/api/auth', authRoutes);
 
 // Mount shipment routes (health check is public, others require authentication)
 app.use('/api/shipments', shipmentRoutes);
+
+// Mount news ingestion routes
+app.use('/api/news', newsIngestionRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
@@ -73,4 +73,4 @@ const startServer = (portToTry) => {
 };
 
 // Start the server
-startServer(port); 
+startServer(port);
