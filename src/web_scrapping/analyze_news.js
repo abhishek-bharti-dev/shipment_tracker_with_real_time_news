@@ -9,6 +9,7 @@ const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
 // Function to analyze all news links using Gemini API
 async function analyzeNewsLinks(links) {
+    console.log(links);
     try {
         if (!links || !Array.isArray(links) || links.length === 0) {
             throw new Error('No valid links provided for analysis');
