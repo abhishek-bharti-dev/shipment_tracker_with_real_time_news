@@ -22,7 +22,7 @@
     "express": "^4.21.2",
     "fs": "^0.0.1-security",
     "jsonwebtoken": "^9.0.2",
-    "mongoose": "^8.13.1",
+    "mongoose": "^8.13.2",
     "natural": "^8.0.1",
     "node-cron": "^3.0.3",
     "puppeteer": "^24.4.0",
