@@ -80,7 +80,11 @@ Return a JSON object with an array of incidents in this format:
             "affected_ports": [
                 {
                     "port_name": "Port Name",
-                    "port_code": "PORTCODE"
+                    "port_code": "PORTCODE",
+                    "geo_coordinates": {
+                    "latitude": 0.0,
+                    "longitude": 0.0
+                }
                 }
             ],
             "impact_description": "Description of impact"
@@ -145,11 +149,11 @@ ${JSON.stringify(links, null, 2)}`;
             console.log(`✅ Incidents saved to shipment_incidents.json`);
             
             // //route the incidents to the news ingestion endpoint
-            const newsIngestionEndpoint = 'http://localhost:3000/new_incident';
-            const response = await fetch(newsIngestionEndpoint, {
-                method: 'POST',
-                body: JSON.stringify(incidents),
-            });
+            // const newsIngestionEndpoint = 'http://localhost:3000/new_incident';
+            // const response = await fetch(newsIngestionEndpoint, {
+            //     method: 'POST',
+            //     body: JSON.stringify(incidents),
+            // });
             
 
             return {
