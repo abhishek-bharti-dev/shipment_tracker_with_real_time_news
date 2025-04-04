@@ -1,3 +1,4 @@
 .env
 data/news_links.json
 data/shipment_incidents.json
+node_modules/
