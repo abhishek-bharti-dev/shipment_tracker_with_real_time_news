@@ -25,13 +25,45 @@ const portDelaySchema = new mongoose.Schema({
   }
 });
 
+const seaDelaySchema = new mongoose.Schema({
+  lat_long: {
+    type: [Number],
+    required: true
+  },
+  delay_days: {
+    type: Number,
+    required: true
+  },
+  incident: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Incident',
+    required: true
+  }
+});
+
 const delaySchema = new mongoose.Schema({
   shipment: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'VesselTracking',
     required: true
   },
-  affected_ports: [portDelaySchema]
+  location_type: {
+    type: String,
+    required: true,
+    enum: ['port', 'sea']
+  },
+  affected_ports: {
+    type: [portDelaySchema],
+    required: function() {
+      return this.location_type === 'port';
+    }
+  },
+  sea_delays: {
+    type: [seaDelaySchema],
+    required: function() {
+      return this.location_type === 'sea';
+    }
+  }
 }, {
   timestamps: true
 });
