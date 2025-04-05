@@ -7,6 +7,7 @@ const port = process.env.PORT || 3000;
 const connectDB = require('./config/database');
 const authRoutes = require('./routes/auth');
 const newsIngestionRoutes = require('./routes/newsIngestionRoutes');
+const mapVisualizationRoutes = require('./routes/mapVisualization');
 
 // Connect to MongoDB
 connectDB();
@@ -35,6 +36,9 @@ app.use('/api/auth', authRoutes);
 
 // Mount news ingestion routes
 app.use('/api/news', newsIngestionRoutes);
+
+// Mount presentation routes
+app.use('/api/presentation', mapVisualizationRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
