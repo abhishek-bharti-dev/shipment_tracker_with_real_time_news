@@ -85,35 +85,15 @@ async function getShipmentsForVessel(vesselId) {
 }
 
 /**
- * Displays affected vessels and their shipments for a port
- * @param {Object} port 
- * @returns {Promise<void>}
+ * Gets all incidents affecting a specific port
+ * @param {string} portId 
+ * @returns {Promise<Array>}
  */
-async function displayAffectedVesselsAndShipments(port) {
-  const vessels = await getVesselsAtPort(port.port_code);
-  
-  if (vessels.length > 0) {
-    console.log(`\nPort: ${port.port_name} (${port.port_code})`);
-    console.log('Affected Vessels and their Shipments:');
-    
-    for (const vessel of vessels) {
-      console.log(`\nVessel: ${vessel.vessel_name} (${vessel.vessel_code})`);
-      
-      const shipments = await getShipmentsForVessel(vessel._id);
-      
-      if (shipments.length > 0) {
-        console.log('Affected Shipments:');
-        shipments.forEach((shipment, index) => {
-          console.log(`${index + 1}. Shipment ID: ${shipment.shipment_id}`);
-          console.log(`   Cargo Type: ${shipment.cargo_type}`);
-          console.log(`   POL: ${shipment.POL}`);
-          console.log(`   POD: ${shipment.POD}`);
-        });
-      } else {
-        console.log('No shipments found for this vessel');
-      }
-    }
-  }
+async function getIncidentsForPort(portId) {
+  return await Incident.find({
+    'affected_ports': portId,
+    'estimated_duration_days': { $exists: true, $gt: 0 }
+  });
 }
 
 /**
@@ -131,10 +111,40 @@ async function getAffectedPortIds() {
       return;
     }
     
-    console.log('\nAffected Vessels and Shipments by Port:');
+    console.log('\n=== Affected Ports ===');
     for (const portId of incident.affected_ports) {
       const port = await getPortDetails(portId);
-      await displayAffectedVesselsAndShipments(port);
+      console.log(`\nPort: ${port.port_name} (${port.port_code})`);
+      
+      // Get vessels at this port
+      const vessels = await getVesselsAtPort(port.port_code);
+      if (vessels.length > 0) {
+        console.log('  Affected Vessels:');
+        for (const vessel of vessels) {
+          // Get incidents affecting this port
+          const incidents = await getIncidentsForPort(port._id);
+          const totalDelay = incidents.reduce((sum, incident) => {
+            return sum + (incident.estimated_duration_days || 0);
+          }, 0);
+          
+          console.log(`    Vessel: ${vessel.vessel_name} (${vessel.vessel_code})`);
+          console.log(`      Estimated Delay: ${totalDelay} days`);
+          
+          // Get shipments for this vessel
+          const shipments = await getShipmentsForVessel(vessel._id);
+          if (shipments.length > 0) {
+            console.log('      Affected Shipments:');
+            shipments.forEach((shipment, index) => {
+              console.log(`        ${index + 1}. Shipment ID: ${shipment.shipment_id}`);
+              console.log(`           Cargo Type: ${shipment.cargo_type}`);
+              console.log(`           POL: ${shipment.POL}`);
+              console.log(`           POD: ${shipment.POD}`);
+            });
+          }
+        }
+      } else {
+        console.log('  No vessels found at this port');
+      }
     }
     
   } catch (error) {
@@ -155,5 +165,5 @@ module.exports = {
   getPortDetails,
   getVesselsAtPort,
   getShipmentsForVessel,
-  displayAffectedVesselsAndShipments
+  getIncidentsForPort
 };
