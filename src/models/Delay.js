@@ -26,7 +26,7 @@ const portDelaySchema = new mongoose.Schema({
 });
 
 const seaDelaySchema = new mongoose.Schema({
-  lat_long: {
+  lat_lon: {
     type: [Number],
     required: true
   },
