@@ -149,12 +149,17 @@ ${JSON.stringify(links, null, 2)}`;
             console.log(`✅ Incidents saved to shipment_incidents.json`);
             
             // //route the incidents to the news ingestion endpoint
-            // const newsIngestionEndpoint = 'http://localhost:3000/new_incident';
-            // const response = await fetch(newsIngestionEndpoint, {
-            //     method: 'POST',
-            //     body: JSON.stringify(incidents),
-            // });
-            
+            const newsIngestionEndpoint = 'http://localhost:3000/new_incident';
+            // Fire and forget - don't wait for response
+            fetch(newsIngestionEndpoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(incidents)
+            }).catch(error => {
+                console.error('❌ Error sending incidents to ingestion endpoint:', error);
+            });
 
             return {
                 totalArticles: links.length,
