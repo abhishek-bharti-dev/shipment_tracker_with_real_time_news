@@ -34,23 +34,23 @@
         }
       },
       {
-        "port_name": "Massawa Port",
-        "port_code": "ERMSW",
+        "port_name": "Suez Canal",
+        "port_code": "EGSUE",
         "geo_coordinates": {
-          "latitude": 15.63,
-          "longitude": 39.43
+          "latitude": 30,
+          "longitude": 32
         }
       },
       {
-        "port_name": "Assab Port",
-        "port_code": "ERASA",
+        "port_name": "Massawa Port",
+        "port_code": "ERMSA",
         "geo_coordinates": {
-          "latitude": 13.13,
-          "longitude": 42.78
+          "latitude": 15.63,
+          "longitude": 39.44
         }
       }
     ],
-    "impact_description": "The attack in the Red Sea caused disruptions to shipping operations, affecting several ports such as Port Sudan, Jeddah Islamic Port, Massawa Port, and Assab Port, including potential delays and rerouting of vessels in the region due to security concerns."
+    "impact_description": "The attack in the Red Sea caused disruptions to shipping routes, potentially affecting ports along the route, such as Port Sudan, Jeddah Islamic Port, and Massawa Port.  The Suez Canal, a critical transit point, could also experience indirect impacts due to rerouting or increased congestion."
   },
   {
     "news": {
@@ -60,7 +60,7 @@
       "news_location": "unknown"
     },
     "incident_location": {
-      "name": "Mediterranean and Asia Ports",
+      "name": "Mediterranean & Asia Ports",
       "geo_coordinates": {
         "latitude": "unknown",
         "longitude": "unknown"
@@ -75,28 +75,12 @@
         "port_code": "USLAX",
         "geo_coordinates": {
           "latitude": 33.74,
-          "longitude": -118.27
-        }
-      },
-      {
-        "port_name": "Port of Long Beach",
-        "port_code": "USLGB",
-        "geo_coordinates": {
-          "latitude": 33.77,
-          "longitude": -118.19
-        }
-      },
-      {
-        "port_name": "Port of Singapore",
-        "port_code": "SGSIN",
-        "geo_coordinates": {
-          "latitude": 1.28,
-          "longitude": 103.85
+          "longitude": -118.25
         }
       },
       {
         "port_name": "Port of Shanghai",
-        "port_code": "CNSHA",
+        "port_code": "CNSHG",
         "geo_coordinates": {
           "latitude": 31.23,
           "longitude": 121.5
@@ -111,15 +95,23 @@
         }
       },
       {
-        "port_name": "Port of Valencia",
-        "port_code": "ESVLC",
+        "port_name": "Port of Singapore",
+        "port_code": "SGSIN",
         "geo_coordinates": {
-          "latitude": 39.47,
-          "longitude": -0.32
+          "latitude": 1.29,
+          "longitude": 103.85
+        }
+      },
+      {
+        "port_name": "Port of Long Beach",
+        "port_code": "USLGB",
+        "geo_coordinates": {
+          "latitude": 33.77,
+          "longitude": -118.18
         }
       }
     ],
-    "impact_description": "Severe port congestion in the Mediterranean and Asia has caused significant delays for Maersk vessels.  Major ports like Los Angeles, Long Beach, Singapore, Shanghai, Rotterdam and Valencia are among those experiencing congestion, resulting in reduced efficiency and increased wait times for ships."
+    "impact_description": "Severe port congestion in the Mediterranean and Asia is causing significant vessel delays.  Major container ports like the Port of Los Angeles, Port of Shanghai, Port of Rotterdam, Port of Singapore, and Port of Long Beach are all experiencing impacts due to increased waiting times and reduced efficiency."
   },
   {
     "news": {
@@ -132,7 +124,7 @@
       "name": "South India Ports",
       "geo_coordinates": {
         "latitude": 13,
-        "longitude": 79
+        "longitude": 78
       }
     },
     "is_sea_port_issue": "port",
@@ -160,10 +152,10 @@
         "port_code": "INCOI",
         "geo_coordinates": {
           "latitude": 9.96,
-          "longitude": 76.25
+          "longitude": 76.26
         }
       }
     ],
-    "impact_description": "Technical glitches in newly implemented terminal operating systems at several South Indian ports, including Chennai, Tuticorin and Cochin, caused significant delays in cargo handling and vessel operations."
+    "impact_description": "Technical glitches in new terminal operating systems at South Indian ports are causing delays.  Ports such as Chennai, Tuticorin, and Cochin are experiencing disruptions to their operations, leading to vessel delays and potential cargo backlogs."
   }
 ]
