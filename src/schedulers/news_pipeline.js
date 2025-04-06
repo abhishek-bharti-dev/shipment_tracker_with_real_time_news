@@ -7,6 +7,7 @@ class NewsPipelineScheduler {
     constructor() {
         this.isRunning = false;
         this.lastRunTime = null;
+        this.cronJob = null;
     }
 
     async runPipeline() {
@@ -42,24 +43,26 @@ class NewsPipelineScheduler {
 
     start() {
         console.log('🚀 Starting News Pipeline Scheduler...');
-        console.log('⏱️ Will run every hour');
+        console.log('⏱️ Will run at the start of every hour');
 
         // Run immediately on startup
         this.runPipeline();
 
-        // Schedule regular runs at teh start of every hour
-        cron.schedule('0 * * * *', () => {
+        // Schedule regular runs at the start of every hour
+        this.cronJob = cron.schedule('0 * * * *', () => {
             this.runPipeline();
         });
     }
 
     stop() {
         console.log('🛑 Stopping News Pipeline Scheduler...');
-        // Add any cleanup logic here if needed
+        if (this.cronJob) {
+            this.cronJob.stop();
+        }
     }
 }
 
-// Create and start the scheduler
+// Create and export a singleton instance
 const scheduler = new NewsPipelineScheduler();
 scheduler.start();
 
@@ -75,3 +78,5 @@ process.on('SIGTERM', () => {
     scheduler.stop();
     process.exit(0);
 });
+
+module.exports = scheduler;

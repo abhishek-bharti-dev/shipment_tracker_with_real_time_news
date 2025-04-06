@@ -10,6 +10,8 @@ const newsIngestionRoutes = require('./routes/newsIngestionRoutes');
 const mapVisualizationRoutes = require('./routes/mapVisualization');
 const vesselTrackingRoutes = require('./routes/vesselTrackingRoutes');
 const incidentRoutes = require('./routes/incidentRoutes');
+// Import the news pipeline scheduler
+require('./schedulers/news_pipeline');
 
 // Connect to MongoDB
 connectDB();
