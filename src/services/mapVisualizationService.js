@@ -15,10 +15,8 @@ const getMapDataService = async (email) => {
 
         // 2. Get all shipments for the user
         const shipments = await Shipment.find({ client_id: user._id });
-
         // 3. Get delays for these shipments
-        const delays = await Delay.find({ shipment: { $in: shipments.map(s => s.tracking_id) } });
-        console.log("delayed shipments: ", delays.length);
+        const delays = await Delay.find({ shipment: { $in: shipments.map(s => s._id) } });
         // Create map data structure
         const mapData = {
             danger: {
@@ -44,9 +42,6 @@ const getMapDataService = async (email) => {
                 // Handle port delays
                 for (const portDelay of delay.affected_ports) {
                     const incident = await Incident.findById(portDelay.incident);
-                    console.log("incident id: ", incident._id);
-                    console.log("delay id: ", delay._id);
-                    console.log(incident.severity);
                     if (incident) {
                         let coordinates = await Port.findById(portDelay.port);
                         coordinates = coordinates.lat_lon;
@@ -67,8 +62,6 @@ const getMapDataService = async (email) => {
                 // Handle sea delays
                 for (const seaDelay of delay.sea_delays) {
                     const incident = await Incident.findById(seaDelay.incident);
-                    console.log("samudra ka incident id: ",incident._id);
-                    console.log("samudra ka incident severity: ",incident.severity);
 
                     if (incident) {
                         const coordinates = incident.lat_lon;
@@ -91,7 +84,7 @@ const getMapDataService = async (email) => {
         // 5. Get vessel tracking data for shipments without delays
         const delayedShipmentIds = delays.map(d => d.shipment.toString());
         const shipmentsWithoutDelays = shipments.filter(s => 
-            !delayedShipmentIds.includes(s.tracking_id.toString())
+            !delayedShipmentIds.includes(s._id.toString())
         );
         for (const shipment of shipmentsWithoutDelays) {
             const vesselTracking = await VesselTracking.findById(shipment.tracking_id);
