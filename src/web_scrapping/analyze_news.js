@@ -149,7 +149,8 @@ ${JSON.stringify(links, null, 2)}`;
             console.log(`✅ Incidents saved to shipment_incidents.json`);
             
             // //route the incidents to the news ingestion endpoint
-            const newsIngestionEndpoint = 'http://localhost:3000/new_incident';
+            // this might not work becuse route path is not correct and also need the server to be running
+            const newsIngestionEndpoint = 'http://localhost:3000/api/news/new_incidents';
             // Fire and forget - don't wait for response
             fetch(newsIngestionEndpoint, {
                 method: 'POST',
