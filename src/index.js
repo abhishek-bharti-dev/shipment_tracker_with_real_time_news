@@ -8,6 +8,7 @@ const connectDB = require('./config/database');
 const authRoutes = require('./routes/auth');
 const newsIngestionRoutes = require('./routes/newsIngestionRoutes');
 const mapVisualizationRoutes = require('./routes/mapVisualization');
+const vesselTrackingRoutes = require('./routes/vesselTrackingRoutes');
 
 // Connect to MongoDB
 connectDB();
@@ -39,6 +40,9 @@ app.use('/api/news', newsIngestionRoutes);
 
 // Mount presentation routes
 app.use('/api/presentation', mapVisualizationRoutes);
+
+// Mount vessel tracking routes
+app.use('/api/presentation', vesselTrackingRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
