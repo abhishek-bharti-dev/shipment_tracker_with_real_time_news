@@ -10,7 +10,11 @@ const signup = async (req, res) => {
         // Check if user already exists
         const existingUser = await User.findOne({ email });
         if (existingUser) {
-            return res.status(400).json({ message: 'User already exists' });
+            return res.status(400).json({
+                success: false,
+                data: null,
+                message: 'User already exists'
+            });
         }
 
         // Create new user
@@ -30,17 +34,24 @@ const signup = async (req, res) => {
         );
 
         res.status(201).json({
-            message: 'User created successfully',
-            token,
-            user: {
-                id: user._id,
-                email: user.email,
-                name: user.name
-            }
+            success: true,
+            data: {
+                token,
+                user: {
+                    id: user._id,
+                    email: user.email,
+                    name: user.name
+                }
+            },
+            message: 'User created successfully'
         });
     } catch (error) {
         console.error('Signup error:', error);
-        res.status(500).json({ message: 'Error creating user', error: error.message });
+        res.status(500).json({
+            success: false,
+            data: null,
+            message: 'Error creating user'
+        });
     }
 };
 
@@ -52,13 +63,21 @@ const login = async (req, res) => {
         // Find user and explicitly select the password field
         const user = await User.findOne({ email }).select('+password');
         if (!user) {
-            return res.status(401).json({ message: 'Invalid credentials' });
+            return res.status(401).json({
+                success: false,
+                data: null,
+                message: 'Invalid credentials'
+            });
         }
 
         // Check password
         const isPasswordValid = await bcrypt.compare(password, user.password);
         if (!isPasswordValid) {
-            return res.status(401).json({ message: 'Invalid credentials' });
+            return res.status(401).json({
+                success: false,
+                data: null,
+                message: 'Invalid credentials'
+            });
         }
 
         // Update last login
@@ -73,17 +92,24 @@ const login = async (req, res) => {
         );
 
         res.status(200).json({
-            message: 'Login successful',
-            token,
-            user: {
-                id: user._id,
-                email: user.email,
-                name: user.name
-            }
+            success: true,
+            data: {
+                token,
+                user: {
+                    id: user._id,
+                    email: user.email,
+                    name: user.name
+                }
+            },
+            message: 'Login successful'
         });
     } catch (error) {
         console.error('Login error:', error);
-        res.status(500).json({ message: 'Error logging in', error: error.message });
+        res.status(500).json({
+            success: false,
+            data: null,
+            message: 'Error logging in'
+        });
     }
 };
 

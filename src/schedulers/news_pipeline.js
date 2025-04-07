@@ -4,9 +4,22 @@ const { fetchGoogleNewsRSS } = require('../web_scrapping/scrapper');
 const { analyzeNewsLinks } = require('../web_scrapping/analyze_news');
 
 class NewsPipelineScheduler {
+    static instance = null;
+    static isStarted = false;
+    static lastStartTime = null;
+
     constructor() {
+        // Prevent multiple instances
+        if (NewsPipelineScheduler.instance) {
+            console.log('🔄 Reusing existing scheduler instance');
+            return NewsPipelineScheduler.instance;
+        }
+        console.log('📦 Creating new scheduler instance');
+        NewsPipelineScheduler.instance = this;
+
         this.isRunning = false;
         this.lastRunTime = null;
+        this.cronJob = null;
     }
 
     async runPipeline() {
@@ -22,6 +35,7 @@ class NewsPipelineScheduler {
 
             console.log('\n🔄 Starting scheduled pipeline...');
             console.log('⏰ Current time:', this.lastRunTime.toISOString());
+            console.log('📊 Last start time:', NewsPipelineScheduler.lastStartTime ? NewsPipelineScheduler.lastStartTime.toISOString() : 'Never');
 
             // Step 1: Fetch news links
             console.log('\n📰 Step 1: Fetching news links...');
@@ -41,27 +55,53 @@ class NewsPipelineScheduler {
     }
 
     start() {
-        console.log('🚀 Starting News Pipeline Scheduler...');
-        console.log('⏱️ Will run every hour');
+        // Prevent multiple starts within 5 seconds
+        if (NewsPipelineScheduler.isStarted) {
+            const timeSinceLastStart = NewsPipelineScheduler.lastStartTime ? 
+                (new Date() - NewsPipelineScheduler.lastStartTime) / 1000 : 0;
+            
+            if (timeSinceLastStart < 5) {
+                console.log(`⚠️ Scheduler was started ${timeSinceLastStart.toFixed(1)} seconds ago, skipping...`);
+                return;
+            }
+        }
+
+        console.log('\n🚀 Starting News Pipeline Scheduler...');
+        console.log('⏱️ Will run at the start of every hour');
+        console.log('📊 Current time:', new Date().toISOString());
+
+        // Stop any existing cron job
+        if (this.cronJob) {
+            console.log('🔄 Stopping existing cron job...');
+            this.cronJob.stop();
+        }
 
         // Run immediately on startup
         this.runPipeline();
 
-        // Schedule regular runs at teh start of every hour
-        cron.schedule('0 * * * *', () => {
+        // Schedule regular runs at the start of every hour
+        this.cronJob = cron.schedule('0 * * * *', () => {
+            console.log('\n⏰ Cron trigger: Starting scheduled run...');
             this.runPipeline();
         });
+
+        NewsPipelineScheduler.isStarted = true;
+        NewsPipelineScheduler.lastStartTime = new Date();
     }
 
     stop() {
-        console.log('🛑 Stopping News Pipeline Scheduler...');
-        // Add any cleanup logic here if needed
+        console.log('\n🛑 Stopping News Pipeline Scheduler...');
+        if (this.cronJob) {
+            this.cronJob.stop();
+            console.log('✅ Cron job stopped');
+        }
+        NewsPipelineScheduler.isStarted = false;
+        NewsPipelineScheduler.lastStartTime = null;
     }
 }
 
-// Create and start the scheduler
+// Create and export a singleton instance
 const scheduler = new NewsPipelineScheduler();
-scheduler.start();
 
 // Handle graceful shutdown
 process.on('SIGINT', () => {
@@ -75,3 +115,5 @@ process.on('SIGTERM', () => {
     scheduler.stop();
     process.exit(0);
 });
+
+module.exports = scheduler;

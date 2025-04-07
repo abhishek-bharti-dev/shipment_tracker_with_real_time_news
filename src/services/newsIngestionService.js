@@ -185,6 +185,7 @@ async function processNewsItems(newsItems) {
             });
         }
     }
+    console.log(results);
     
     return results;
 }

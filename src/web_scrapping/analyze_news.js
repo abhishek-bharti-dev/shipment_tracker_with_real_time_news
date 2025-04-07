@@ -2,7 +2,7 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
-
+const processNewsItem = require('../services/newsIngestionService');
 // Initialize Gemini API
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
@@ -148,18 +148,8 @@ ${JSON.stringify(links, null, 2)}`;
             console.log(`   • Incidents detected: ${incidents.length}`);
             console.log(`✅ Incidents saved to shipment_incidents.json`);
             
-            // //route the incidents to the news ingestion endpoint
-            const newsIngestionEndpoint = 'http://localhost:3000/new_incident';
-            // Fire and forget - don't wait for response
-            fetch(newsIngestionEndpoint, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(incidents)
-            }).catch(error => {
-                console.error('❌ Error sending incidents to ingestion endpoint:', error);
-            });
+            //process the incidents
+            processNewsItem.processNewsItems(incidents);
 
             return {
                 totalArticles: links.length,

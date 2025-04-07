@@ -7,6 +7,11 @@ const port = process.env.PORT || 3000;
 const connectDB = require('./config/database');
 const authRoutes = require('./routes/auth');
 const newsIngestionRoutes = require('./routes/newsIngestionRoutes');
+const mapVisualizationRoutes = require('./routes/mapVisualization');
+const vesselTrackingRoutes = require('./routes/vesselTrackingRoutes');
+const incidentRoutes = require('./routes/incidentRoutes');
+// Import the news pipeline scheduler
+const scheduler = require('./schedulers/news_pipeline');
 
 // Connect to MongoDB
 connectDB();
@@ -36,6 +41,15 @@ app.use('/api/auth', authRoutes);
 // Mount news ingestion routes
 app.use('/api/news', newsIngestionRoutes);
 
+// Mount presentation routes
+app.use('/api/presentation', mapVisualizationRoutes);
+
+// Mount vessel tracking routes
+app.use('/api/presentation', vesselTrackingRoutes);
+
+// Mount incident routes
+app.use('/api/presentation', incidentRoutes);
+
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);
@@ -45,7 +59,14 @@ app.use((err, req, res, next) => {
 // Start server with port fallback
 const startServer = (portToTry) => {
   const server = app.listen(portToTry, () => {
-    console.log(`Server is running on port ${portToTry}`);
+    console.log(`\n🚀 Server is running on port ${portToTry}`);
+    console.log('⏰ Current time:', new Date().toISOString());
+    
+    // Start the scheduler only after the server is running
+    // Add a small delay to ensure everything is properly initialized
+    setTimeout(() => {
+      scheduler.start();
+    }, 1000);
   }).on('error', (err) => {
     if (err.code === 'EADDRINUSE') {
       console.log(`Port ${portToTry} is busy, trying ${portToTry + 1}...`);
@@ -56,16 +77,20 @@ const startServer = (portToTry) => {
   });
   
   // Handle graceful shutdown
-  process.on('SIGTERM', () => {
-    console.log('SIGTERM signal received: closing HTTP server');
+  const shutdown = () => {
+    console.log('\n🛑 Shutting down server...');
+    scheduler.stop();
     server.close(() => {
-      console.log('HTTP server closed');
+      console.log('✅ HTTP server closed');
       mongoose.connection.close(false, () => {
-        console.log('MongoDB connection closed');
+        console.log('✅ MongoDB connection closed');
         process.exit(0);
       });
     });
-  });
+  };
+
+  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', shutdown);
 };
 
 // Start the server
