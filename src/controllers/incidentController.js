@@ -1,4 +1,5 @@
 const incidentService = require('../services/incidentService');
+const delayService = require('../services/delayService');
 
 const createIncident = async (req, res) => {
     try {
@@ -95,9 +96,34 @@ const updateIncidentStatus = async (req, res) => {
     }
 };
 
+/**
+ * Process all unupdated delay incidents
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+const processUnupdatedDelayIncidents = async (req, res) => {
+    try {
+        const results = await delayService.processUnupdatedDelayIncidents();
+        
+        res.status(200).json({
+            success: true,
+            message: 'Successfully processed unupdated delay incidents',
+            data: results
+        });
+    } catch (error) {
+        console.error('Error in processUnupdatedDelayIncidents controller:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error processing unupdated delay incidents',
+            error: error.message
+        });
+    }
+};
+
 module.exports = {
     createIncident,
     getIncidents,
     getIncidentById,
-    updateIncidentStatus
+    updateIncidentStatus,
+    processUnupdatedDelayIncidents
 }; 

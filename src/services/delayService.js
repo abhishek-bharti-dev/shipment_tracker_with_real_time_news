@@ -3,166 +3,191 @@ const Delay = require('../models/Delay');
 const VesselTracking = require('../models/VesselTracking');
 const Port = require('../models/Port');
 const Incident = require('../models/Incident');
+const User = require('../models/User');
+const emailService = require('./emailService');
 
-/**
- * Updates or creates a delay record for a shipment
- * @param {Object} params
- * @param {string} params.shipmentId - The ID of the affected vessel
- * @param {string} params.incidentId - The ID of the incident causing the delay
- * @param {Array} params.affectedPorts - Array of port IDs causing the delay
- * @param {string} [params.notes] - Optional notes about the delay
- * @returns {Promise<Object>} The created/updated delay record
- */
-async function updateShipmentDelay({ shipmentId, incidentId, affectedPorts, notes = '' }) {
-  try {
-    // Get vessel details
-    const vessel = await VesselTracking.findById(shipmentId);
-    if (!vessel) {
-      throw new Error(`Vessel not found with ID: ${shipmentId}`);
+class DelayService {
+    /**
+     * Calculate total delay for a shipment
+     * @param {string} shipmentId - The ID of the shipment
+     * @returns {Promise<number>} Total delay in days
+     */
+    async calculateTotalDelay(shipmentId) {
+        try {
+            const delays = await Delay.find({ shipment: shipmentId });
+            let totalDelay = 0;
+
+            for (const delay of delays) {
+                if (delay.location_type === 'port') {
+                    // Sum up delay days from all affected ports
+                    totalDelay += delay.affected_ports.reduce((sum, port) => sum + port.delay_days, 0);
+                } else {
+                    // Sum up delay days from all sea delays
+                    totalDelay += delay.sea_delays.reduce((sum, sea) => sum + sea.delay_days, 0);
+                }
+            }
+
+            return totalDelay;
+        } catch (error) {
+            console.error('Error in calculateTotalDelay:', error);
+            throw error;
+        }
     }
 
-    // Get incident details
-    const incident = await Incident.findById(incidentId);
-    if (!incident) {
-      throw new Error(`Incident not found with ID: ${incidentId}`);
+    /**
+     * Get all incidents where delay_updated is false
+     * @returns {Promise<Array>} Array of incidents
+     */
+    async getUnupdatedDelayIncidents() {
+        try {
+            const incidents = await Incident.find({ delay_updated: false })
+                .populate('source_news')
+                .populate('affected_ports');
+            
+            return incidents;
+        } catch (error) {
+            console.error('Error fetching unupdated delay incidents:', error);
+            throw error;
+        }
     }
 
-    // Get port details for all affected ports
-    const ports = await Port.find({ _id: { $in: affectedPorts } });
-    if (ports.length !== affectedPorts.length) {
-      throw new Error('One or more ports not found');
+    /**
+     * Process unupdated delay incidents
+     * @returns {Promise<Object>} Processing results
+     */
+    async processUnupdatedDelayIncidents() {
+        try {
+            // Get all incidents where delay_updated is false
+            const unupdatedIncidents = await Incident.find({ delay_updated: false })
+                .populate('source_news')
+                .populate('affected_ports');
+            // console.log(unupdatedIncidents);
+
+            const results = {
+                processed: 0,
+                skipped: 0,
+                errors: 0,
+                details: []
+            };
+
+            for (const incident of unupdatedIncidents) {
+                try {
+                    if (incident.location_type === 'sea') {
+                        // Dummy response for sea incidents
+                        results.details.push({
+                            incidentId: incident._id,
+                            type: 'sea',
+                            status: 'skipped',
+                            message: 'Sea incident processing to be implemented later'
+                        });
+                        results.skipped++;
+                        continue;
+                    }
+
+                    // Process port incidents
+                    const affectedPorts = incident.affected_ports;
+                    for (const port of affectedPorts) {
+                        // console.log(port.port_code);
+                        // Find vessels that have this port in their events but no actual arrival time
+                        const vessels = await VesselTracking.find({
+                            'events': {
+                                $elemMatch: {
+                                    'port_code': port.port_code,
+                                    'actual_time_of_arrival': { $exists: false }
+                                }
+                            }
+                        });
+                        // console.log(vessels);
+                        for (const vessel of vessels) {
+                            const delay = await this.calculateDelay(incident, vessel);
+                            // console.log(delay);
+                            if (delay > 0) {
+                                // Create or update delay record
+                                await Delay.findOneAndUpdate(
+                                    {
+                                        shipment: vessel.shipment_id,
+                                        location_type: 'port'
+                                    },
+                                    {
+                                        $push: {
+                                            affected_ports: {
+                                                port: port._id,
+                                                incident: incident._id,
+                                                delay_days: delay
+                                            }
+                                        }
+                                    },
+                                    { upsert: true, new: true }
+                                );
+                            }
+                        }
+                    }
+
+                    // Mark incident as processed
+                    await Incident.findByIdAndUpdate(incident._id, { delay_updated: true });
+
+                    results.details.push({
+                        incidentId: incident._id,
+                        type: 'port',
+                        status: 'processed',
+                        message: 'Successfully processed port incident'
+                    });
+                    results.processed++;
+                } catch (error) {
+                    console.error(`Error processing incident ${incident._id}:`, error);
+                    results.details.push({
+                        incidentId: incident._id,
+                        type: incident.location_type,
+                        status: 'error',
+                        message: error.message
+                    });
+                    results.errors++;
+                }
+            }
+
+            return results;
+        } catch (error) {
+            console.error('Error in processUnupdatedDelayIncidents:', error);
+            throw error;
+        }
     }
 
-    // Calculate total delay days from the incident
-    const totalDelayDays = incident.estimated_duration_days || 0;
+    /**
+     * Calculate delay in days for a vessel based on incident
+     * @param {Object} incident - The incident document
+     * @param {Object} vessel - The vessel tracking document
+     * @returns {Number} Delay in days
+     */
+    async calculateDelay(incident, vessel) {
+        try {
+            // Find the relevant event for the port
+            const portEvent = vessel.events.find(event => 
+                event.port_code && 
+                incident.affected_ports.some(port => port.port_code === event.port_code)
+            );
+            // console.log(portEvent);
 
-    // Prepare affected ports data
-    const affectedPortsData = ports.map(port => ({
-      port: port._id,
-      delay_days: totalDelayDays,
-      port_name: port.port_name,
-      port_code: port.port_code,
-      incident: incidentId // Add incident reference to each port
-    }));
+            if (!portEvent || !portEvent.expected_time_of_arrival) {
+                return 0;
+            }
 
-    // Check if delay record already exists for this vessel and incident
-    let delay = await Delay.findOne({
-      shipment: shipmentId,
-      'affected_ports.incident': incidentId
-    });
+            const expectedArrival = new Date(portEvent.expected_time_of_arrival);
+            const incidentCreatedAt = new Date(incident.createdAt);
+            const incidentDelay = incident.estimated_duration_days;
+            // console.log("expectedArrival", expectedArrival);
+            // console.log("incidentCreatedAt", incidentCreatedAt);
+            // console.log("incidentDelay", incidentDelay);
 
-    if (delay) {
-      // Update existing delay record
-      delay.affected_ports = affectedPortsData;
-      await delay.save();
-      console.log('Updated existing delay record');
-    } else {
-      // Create new delay record
-      delay = await Delay.create({
-        shipment: shipmentId,
-        affected_ports: affectedPortsData
-      });
-      console.log('Created new delay record');
+            // Calculate total delay
+            const totalDelay = Math.max(0, incidentDelay - 
+                Math.floor((expectedArrival - incidentCreatedAt) / (1000 * 60 * 60 * 24)));
+
+            return totalDelay;
+        } catch (error) {
+            console.error('Error in calculateDelay:', error);
+            throw error;
+        }
     }
-
-    return delay;
-  } catch (error) {
-    console.error('Error updating shipment delay:', error);
-    throw error;
-  }
 }
 
-/**
- * Gets all delays for a specific shipment
- * @param {string} shipmentId - The ID of the shipment
- * @returns {Promise<Array>} Array of delay records
- */
-async function getShipmentDelays(shipmentId) {
-  try {
-    return await Delay.find({ shipment: shipmentId })
-      .populate('affected_ports.port')
-      .populate('incident')
-      .sort({ createdAt: -1 });
-  } catch (error) {
-    console.error('Error getting shipment delays:', error);
-    throw error;
-  }
-}
-
-/**
- * Updates the status of a delay
- * @param {string} delayId - The ID of the delay record
- * @param {string} status - New status (pending, in_progress, resolved)
- * @returns {Promise<Object>} Updated delay record
- */
-async function updateDelayStatus(delayId, status) {
-  try {
-    const delay = await Delay.findById(delayId);
-    if (!delay) {
-      throw new Error(`Delay not found with ID: ${delayId}`);
-    }
-
-    delay.status = status;
-    await delay.save();
-    return delay;
-  } catch (error) {
-    console.error('Error updating delay status:', error);
-    throw error;
-  }
-}
-
-/**
- * Handles new incident creation and updates delays for affected shipments
- * @param {string} incidentId - The ID of the new incident
- * @returns {Promise<void>}
- */
-async function handleNewIncident(incidentId) {
-  try {
-    // Get the incident details
-    const incident = await Incident.findById(incidentId);
-    if (!incident) {
-      throw new Error(`Incident not found with ID: ${incidentId}`);
-    }
-
-    // Get all affected ports
-    const affectedPorts = incident.affected_ports;
-    if (!affectedPorts || affectedPorts.length === 0) {
-      console.log('No affected ports found for this incident');
-      return;
-    }
-
-    // Get all vessels that are currently at these ports
-    const portCodes = await Port.find({ _id: { $in: affectedPorts } })
-      .select('port_code')
-      .then(ports => ports.map(p => p.port_code));
-
-    const affectedVessels = await VesselTracking.find({
-      'events.port_code': { $in: portCodes },
-      'events.event_type': 'arrival' // Only consider vessels that have arrived
-    });
-
-    console.log(`Found ${affectedVessels.length} affected vessels`);
-
-    // Create/update delay records for each affected vessel
-    for (const vessel of affectedVessels) {
-      await updateShipmentDelay({
-        shipmentId: vessel._id,
-        incidentId: incident._id,
-        affectedPorts: affectedPorts,
-        notes: `Delay caused by incident: ${incident.source_news}`
-      });
-    }
-
-    console.log('Successfully updated delays for all affected vessels');
-  } catch (error) {
-    console.error('Error handling new incident:', error);
-    throw error;
-  }
-}
-
-module.exports = {
-  updateShipmentDelay,
-  getShipmentDelays,
-  updateDelayStatus,
-  handleNewIncident
-}; 
+module.exports = new DelayService(); 

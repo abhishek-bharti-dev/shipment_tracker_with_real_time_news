@@ -8,6 +8,7 @@ const Port = require('../models/Port');
 const { search } = require('../routes/incidentRoutes');
 const imageExtractionService = require('./imageExtractionService');
 const geminiApi = require('./geminiApi');
+const delayService = require('./delayService');
 // const Vessel = require('../models/VesselTracking');
 
 class IncidentService {
@@ -87,7 +88,7 @@ class IncidentService {
     async getVesselDetailsFromShipmentId(shipmentId,severity,news_summary) {
         const shipment = await Shipment.findById(shipmentId);
         const vessel = await VesselTracking.findById(shipment.tracking_id);
-        const totalDelay = await this.calculateTotalDelay(shipmentId);
+        const totalDelay = await delayService.calculateTotalDelay(shipmentId);
         
         // Get expected arrival time from the last event in the events array
         const lastEvent = vessel.events[vessel.events.length - 1];

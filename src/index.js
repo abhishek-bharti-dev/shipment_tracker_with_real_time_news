@@ -12,6 +12,7 @@ const vesselTrackingRoutes = require('./routes/vesselTrackingRoutes');
 const incidentRoutes = require('./routes/incidentRoutes');
 const emailRoutes = require('./routes/emailRoutes');
 const shipmentStatsRoutes = require('./routes/shipmentStatsRoutes');
+const delayRoutes = require('./routes/delayRoutes');
 // Import the news pipeline scheduler
 const scheduler = require('./schedulers/news_pipeline');
 
@@ -58,6 +59,9 @@ app.use('/api/email', emailRoutes);
 // Mount shipment stats routes
 app.use('/api/shipment-stats', shipmentStatsRoutes);
 
+// Mount delay routes
+app.use('/api/delays', delayRoutes);
+
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);
@@ -72,9 +76,9 @@ const startServer = (portToTry) => {
     
     // Start the scheduler only after the server is running
     // Add a small delay to ensure everything is properly initialized
-    setTimeout(() => {
-      scheduler.start();
-    }, 1000);
+    // setTimeout(() => {
+    //   scheduler.start();
+    // }, 1000);
   }).on('error', (err) => {
     if (err.code === 'EADDRINUSE') {
       console.log(`Port ${portToTry} is busy, trying ${portToTry + 1}...`);
