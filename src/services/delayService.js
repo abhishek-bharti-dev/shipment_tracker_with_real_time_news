@@ -86,12 +86,14 @@ class DelayService {
                 skipped: 0,
                 errors: 0,
                 details: [],
-                updatedShipmentIds: [] // New array to track updated shipment IDs
+                delayNotifications: [] // New array to store delay notifications
             };
+
+            // Create a map to store notifications by user and shipment
+            const notificationMap = new Map();
 
             for (const incident of unupdatedIncidents) {
                 try {
-                    console.log(incident.location_type);
                     if (incident.location_type === 'sea') {
                         // Find vessels that are in transit
                         const vesselsInTransit = await VesselTracking.find({
@@ -135,9 +137,31 @@ class DelayService {
                                         { upsert: true, new: true }
                                     );
                                     
-                                    // Add shipment ID to the results if it was updated
                                     if (updatedDelay) {
-                                        results.updatedShipmentIds.push(shipment._id.toString());
+                                        console.log("this is from delay service");
+                                        // console.log(shipment);
+                                        // console.log(shipment.client_id);
+                                        const key = `${shipment.client_id._id}-${shipment._id}`;
+                                        console.log(key);
+                                        if (!notificationMap.has(key)) {
+                                            notificationMap.set(key, {
+                                                userName: shipment.client_id.name,
+                                                userEmail: shipment.client_id.email,
+                                                shipmentId: shipment._id,
+                                                delayType: 'sea',
+                                                seaIssues: [],
+                                                affectedPorts: [],
+                                                totalDelay: 0
+                                            });
+                                        }
+                                        const notification = notificationMap.get(key);
+                                        notification.seaIssues.push({
+                                            incidentId: incident._id,
+                                            delayDays: delay,
+                                            reason: incident.source_news.title,
+                                            startDate: incident.createdAt
+                                        });
+                                        notification.totalDelay += delay;
                                     }
                                 }
                             }
@@ -170,8 +194,10 @@ class DelayService {
                         });
 
                         for (const vessel of vessels) {
-                            // Get shipment ID from Shipment model using tracking ID
-                            const shipment = await Shipment.findOne({ tracking_id: vessel._id });
+                            // Get shipment and user information
+                            const shipment = await Shipment.findOne({ tracking_id: vessel._id })
+                                .populate('client_id');
+                            
                             if (!shipment) {
                                 console.log(`No shipment found for vessel tracking ID: ${vessel._id}`);
                                 continue;
@@ -197,9 +223,28 @@ class DelayService {
                                     { upsert: true, new: true }
                                 );
                                 
-                                // Add shipment ID to the results if it was updated
                                 if (updatedDelay) {
-                                    results.updatedShipmentIds.push(shipment._id.toString());
+                                    const key = `${shipment.client_id._id}-${shipment._id}`;
+                                    if (!notificationMap.has(key)) {
+                                        notificationMap.set(key, {
+                                            userName: shipment.client_id.name,
+                                            userEmail: shipment.client_id.email,
+                                            shipmentId: shipment._id,
+                                            delayType: 'port',
+                                            seaIssues: [],
+                                            affectedPorts: [],
+                                            totalDelay: 0
+                                        });
+                                    }
+                                    const notification = notificationMap.get(key);
+                                    notification.affectedPorts.push({
+                                        portCode: port.port_code,
+                                        portName: port.port_name,
+                                        delayDays: delay,
+                                        reason: incident.source_news.title,
+                                        startDate: incident.createdAt
+                                    });
+                                    notification.totalDelay += delay;
                                 }
                             }
                         }
@@ -227,9 +272,11 @@ class DelayService {
                 }
             }
 
-            // Remove duplicate shipment IDs
-            results.updatedShipmentIds = [...new Set(results.updatedShipmentIds)];
-            console.log(results);
+            // Convert map to array and add to results
+            results.delayNotifications = Array.from(notificationMap.values());
+            emailService.sendIncidentNotification(results.delayNotifications);
+
+            // Return the results without sending emails
             return results;
         } catch (error) {
             console.error('Error in processUnupdatedDelayIncidents:', error);
@@ -272,6 +319,51 @@ class DelayService {
             console.error('Error in calculateDelay:', error);
             throw error;
         }
+    }
+
+    /**
+     * Send email notifications for processed delays
+     * @param {Array} notifications - Array of delay notifications
+     * @returns {Promise<Object>} Email sending results
+     */
+    async sendDelayEmailNotifications(notifications) {
+        const emailResults = {
+            sent: 0,
+            failed: 0,
+            errors: []
+        };
+
+        for (const notification of notifications) {
+            try {
+                const emailResult = await emailService.sendDelayNotification({
+                    to: notification.userEmail,
+                    userName: notification.userName,
+                    shipmentId: notification.shipmentId,
+                    delayType: notification.delayType,
+                    seaIssues: notification.seaIssues,
+                    affectedPorts: notification.affectedPorts,
+                    totalDelay: notification.totalDelay
+                });
+
+                if (emailResult.success) {
+                    emailResults.sent++;
+                } else {
+                    emailResults.failed++;
+                    emailResults.errors.push({
+                        shipmentId: notification.shipmentId,
+                        error: emailResult.message
+                    });
+                }
+            } catch (error) {
+                emailResults.failed++;
+                emailResults.errors.push({
+                    shipmentId: notification.shipmentId,
+                    error: error.message
+                });
+            }
+        }
+
+        return emailResults;
     }
 }
 
