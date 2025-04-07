@@ -8,10 +8,18 @@ class VesselTrackingController {
             // Get user email from the authenticated user
             const email = req.user.email;
             const vesselData = await vesselTrackingService.getAllVesselsWithImpactAndDelay(email);
-            res.json(vesselData);
+            res.json({
+                success: true,
+                data: vesselData,
+                message: 'Vessel data retrieved successfully'
+            });
         } catch (error) {
             console.error('Error fetching vessel data:', error);
-            res.status(500).json({ error: 'Internal server error' });
+            res.status(500).json({
+                success: false,
+                data: null,
+                message: 'Failed to fetch vessel data'
+            });
         }
     }
 }

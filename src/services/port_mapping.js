@@ -3,7 +3,8 @@ const Incident = require('../models/Incident');
 const Port = require('../models/Port');
 const VesselTracking = require('../models/VesselTracking');
 const Shipment = require('../models/Shipment');
-const incident_id = "67eeece0501f721c7f28136e";
+const { updateShipmentDelay } = require('./delayService');
+const incident_id = "67eeece0501f721c7f281371";
 
 /**
  * Connects to MongoDB
@@ -134,12 +135,28 @@ async function getAffectedPortIds() {
           const shipments = await getShipmentsForVessel(vessel._id);
           if (shipments.length > 0) {
             console.log('      Affected Shipments:');
+            // Update delay for the vessel (not for each shipment)
+            try {
+              await updateShipmentDelay({
+                shipmentId: vessel._id, // Use vessel ID
+                incidentId: incident._id,
+                affectedPorts: [port._id],
+                notes: `Delay at ${port.port_name} for vessel ${vessel.vessel_name} due to incident: ${incident.source_news}`
+              });
+              console.log(`        ✓ Delay record updated for vessel: ${vessel.vessel_name}`);
+            } catch (error) {
+              console.error(`        ✗ Error updating delay record for vessel ${vessel.vessel_name}:`, error.message);
+            }
+            
+            // Display shipment details
             shipments.forEach((shipment, index) => {
               console.log(`        ${index + 1}. Shipment ID: ${shipment.shipment_id}`);
               console.log(`           Cargo Type: ${shipment.cargo_type}`);
               console.log(`           POL: ${shipment.POL}`);
               console.log(`           POD: ${shipment.POD}`);
             });
+          } else {
+            console.log('      No shipments found for this vessel');
           }
         }
       } else {
