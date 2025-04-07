@@ -7,7 +7,8 @@ async function handleCreateNewsIngestion(req, res) {
         // Validate request body
         if (!req.body || !Array.isArray(req.body)) {
             return res.status(400).json({ 
-                success: false, 
+                success: false,
+                data: null,
                 message: 'Invalid request format. Expected an array of news items.' 
             });
         }
@@ -18,16 +19,16 @@ async function handleCreateNewsIngestion(req, res) {
         // Return results
         return res.status(200).json({
             success: true,
-            message: `Processed ${results.success.length} news items successfully, ${results.failed.length} failed`,
-            results
+            data: results,
+            message: `Processed ${results.success.length} news items successfully, ${results.failed.length} failed`
         });
         
     } catch (error) {
         console.error('Error in news ingestion:', error);
         return res.status(500).json({
             success: false,
-            message: 'Internal server error during news ingestion',
-            error: error.message
+            data: null,
+            message: 'Internal server error during news ingestion'
         });
     }
 }
@@ -40,20 +41,22 @@ async function handleGetNewsById(req, res) {
         if (!news) {
             return res.status(404).json({
                 success: false,
+                data: null,
                 message: 'News item not found'
             });
         }
         
         return res.status(200).json({
             success: true,
-            news
+            data: news,
+            message: 'News item retrieved successfully'
         });
     } catch (error) {
         console.error('Error fetching news:', error);
         return res.status(500).json({
             success: false,
-            message: 'Internal server error while fetching news',
-            error: error.message
+            data: null,
+            message: 'Internal server error while fetching news'
         });
     }
 }
@@ -64,15 +67,18 @@ async function handleGetAllNews(req, res) {
         
         return res.status(200).json({
             success: true,
-            count: news.length,
-            news
+            data: {
+                count: news.length,
+                news: news
+            },
+            message: 'All news items retrieved successfully'
         });
     } catch (error) {
         console.error('Error fetching all news:', error);
         return res.status(500).json({
             success: false,
-            message: 'Internal server error while fetching all news',
-            error: error.message
+            data: null,
+            message: 'Internal server error while fetching all news'
         });
     }
 }

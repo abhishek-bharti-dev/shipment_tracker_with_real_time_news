@@ -98,20 +98,12 @@
         "port_name": "Port of Singapore",
         "port_code": "SGSIN",
         "geo_coordinates": {
-          "latitude": 1.29,
-          "longitude": 103.85
-        }
-      },
-      {
-        "port_name": "Port of Long Beach",
-        "port_code": "USLGB",
-        "geo_coordinates": {
-          "latitude": 33.77,
-          "longitude": -118.18
+          "latitude": 1.27,
+          "longitude": 103.83
         }
       }
     ],
-    "impact_description": "Severe port congestion in the Mediterranean and Asia is causing significant vessel delays.  Major container ports like the Port of Los Angeles, Port of Shanghai, Port of Rotterdam, Port of Singapore, and Port of Long Beach are all experiencing impacts due to increased waiting times and reduced efficiency."
+    "impact_description": "Maersk reported significant port congestion in Mediterranean and Asian ports, leading to vessel delays and potential schedule disruptions. This could affect multiple major ports including Los Angeles, Shanghai, Rotterdam, and Singapore."
   },
   {
     "news": {
