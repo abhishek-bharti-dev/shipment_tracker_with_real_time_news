@@ -207,6 +207,7 @@ class IncidentService {
                             const summary = await geminiApi.generateSummary(newsItem.news_details);
                             result.news.push({
                                 title: newsItem.title,
+                                url: newsItem.url,
                                 image: imageUrl,
                                 summary: newsItem.news_details
                             });
