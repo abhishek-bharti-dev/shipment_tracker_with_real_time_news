@@ -80,13 +80,13 @@ class DelayService {
             const unupdatedIncidents = await Incident.find({ delay_updated: false })
                 .populate('source_news')
                 .populate('affected_ports');
-            // console.log(unupdatedIncidents);
 
             const results = {
                 processed: 0,
                 skipped: 0,
                 errors: 0,
-                details: []
+                details: [],
+                updatedShipmentIds: [] // New array to track updated shipment IDs
             };
 
             for (const incident of unupdatedIncidents) {
@@ -113,15 +113,13 @@ class DelayService {
                                 incident.lat_lon[0],
                                 incident.lat_lon[1]
                             );
-                            // console.log(distance);
 
                             // If vessel is within 15km of incident
                             if (distance <= 15) {
                                 const delay = await this.calculateDelay(incident, vessel);
-                                // console.log("sea wala delay", delay);
                                 if (delay > 0) {
                                     // Create or update delay record
-                                    await Delay.findOneAndUpdate(
+                                    const updatedDelay = await Delay.findOneAndUpdate(
                                         {
                                             shipment: shipment._id,
                                             location_type: 'sea'
@@ -136,6 +134,11 @@ class DelayService {
                                         },
                                         { upsert: true, new: true }
                                     );
+                                    
+                                    // Add shipment ID to the results if it was updated
+                                    if (updatedDelay) {
+                                        results.updatedShipmentIds.push(shipment._id.toString());
+                                    }
                                 }
                             }
                         }
@@ -175,10 +178,9 @@ class DelayService {
                             }
 
                             const delay = await this.calculateDelay(incident, vessel);
-                            // console.log("port wala delay", delay);
                             if (delay > 0) {
                                 // Create or update delay record
-                                await Delay.findOneAndUpdate(
+                                const updatedDelay = await Delay.findOneAndUpdate(
                                     {
                                         shipment: shipment._id,
                                         location_type: 'port'
@@ -194,13 +196,18 @@ class DelayService {
                                     },
                                     { upsert: true, new: true }
                                 );
+                                
+                                // Add shipment ID to the results if it was updated
+                                if (updatedDelay) {
+                                    results.updatedShipmentIds.push(shipment._id.toString());
+                                }
                             }
                         }
                     }
 
                     // Mark incident as processed
                     await Incident.findByIdAndUpdate(incident._id, { delay_updated: true });
-
+                    
                     results.details.push({
                         incidentId: incident._id,
                         type: 'port',
@@ -220,6 +227,9 @@ class DelayService {
                 }
             }
 
+            // Remove duplicate shipment IDs
+            results.updatedShipmentIds = [...new Set(results.updatedShipmentIds)];
+            console.log(results);
             return results;
         } catch (error) {
             console.error('Error in processUnupdatedDelayIncidents:', error);

@@ -76,9 +76,9 @@ const startServer = (portToTry) => {
     
     // Start the scheduler only after the server is running
     // Add a small delay to ensure everything is properly initialized
-    // setTimeout(() => {
-    //   scheduler.start();
-    // }, 1000);
+    setTimeout(() => {
+      scheduler.start();
+    }, 1000);
   }).on('error', (err) => {
     if (err.code === 'EADDRINUSE') {
       console.log(`Port ${portToTry} is busy, trying ${portToTry + 1}...`);

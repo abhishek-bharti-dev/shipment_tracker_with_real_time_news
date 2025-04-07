@@ -3,9 +3,23 @@ const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
 const processNewsItem = require('../services/newsIngestionService');
+const delayService = require('../services/delayService');
+const eventEmitter = require('../services/eventEmitter');
+
 // Initialize Gemini API
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+// Set up event listener for delay processing
+eventEmitter.on('processDelays', async () => {
+    try {
+        console.log('\n🔄 Processing delay incidents asynchronously...');
+        const delayResults = await delayService.processUnupdatedDelayIncidents();
+        console.log('Delay processing results:', delayResults);
+    } catch (error) {
+        console.error('Error processing delays:', error);
+    }
+});
 
 // Function to analyze all news links using Gemini API
 async function analyzeNewsLinks(links) {
@@ -149,7 +163,10 @@ ${JSON.stringify(links, null, 2)}`;
             console.log(`✅ Incidents saved to shipment_incidents.json`);
             
             //process the incidents
-            processNewsItem.processNewsItems(incidents);
+            await processNewsItem.processNewsItems(incidents);
+            
+            // Emit event for asynchronous delay processing
+            eventEmitter.emit('processDelays');
 
             return {
                 totalArticles: links.length,
