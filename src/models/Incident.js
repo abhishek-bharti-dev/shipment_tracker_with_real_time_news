@@ -46,6 +46,10 @@ const incidentSchema = new mongoose.Schema({
     required: true,
     enum: ['ongoing', 'resolved'],
     default: 'ongoing'
+  },
+  delay_updated: {
+    type: Boolean,
+    default: false
   }
 }, {
   timestamps: true
