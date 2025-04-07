@@ -9,6 +9,11 @@ const vesselTrackingSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  status: {
+    type: String,
+    enum: ['intransit', 'delivered'],
+    default: 'intransit'
+  },
   lat_lon: {
     type: [Number],
     required: true,
