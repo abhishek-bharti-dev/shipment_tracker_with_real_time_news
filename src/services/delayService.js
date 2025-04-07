@@ -4,9 +4,28 @@ const VesselTracking = require('../models/VesselTracking');
 const Port = require('../models/Port');
 const Incident = require('../models/Incident');
 const User = require('../models/User');
+const Shipment = require('../models/Shipment');
 const emailService = require('./emailService');
 
 class DelayService {
+    // Haversine formula to calculate distance between two points on Earth
+    calculateDistance(lat1, lon1, lat2, lon2) {
+        // console.log(lat1, lon1, lat2, lon2);
+        const R = 6371; // Earth's radius in kilometers
+        const dLat = this.toRad(lat2 - lat1);
+        const dLon = this.toRad(lon2 - lon1);
+        const a = 
+            Math.sin(dLat/2) * Math.sin(dLat/2) +
+            Math.cos(this.toRad(lat1)) * Math.cos(this.toRad(lat2)) * 
+            Math.sin(dLon/2) * Math.sin(dLon/2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        return R * c;
+    }
+
+    toRad(degrees) {
+        return degrees * (Math.PI/180);
+    }
+
     /**
      * Calculate total delay for a shipment
      * @param {string} shipmentId - The ID of the shipment
@@ -72,22 +91,71 @@ class DelayService {
 
             for (const incident of unupdatedIncidents) {
                 try {
+                    console.log(incident.location_type);
                     if (incident.location_type === 'sea') {
-                        // Dummy response for sea incidents
+                        // Find vessels that are in transit
+                        const vesselsInTransit = await VesselTracking.find({
+                            status: 'intransit'
+                        });
+
+                        for (const vessel of vesselsInTransit) {
+                            // Get shipment ID from Shipment model using tracking ID
+                            const shipment = await Shipment.findOne({ tracking_id: vessel._id });
+                            if (!shipment) {
+                                console.log(`No shipment found for vessel tracking ID: ${vessel._id}`);
+                                continue;
+                            }
+
+                            // Calculate distance between vessel and incident location
+                            const distance = this.calculateDistance(
+                                vessel.lat_lon[0],
+                                vessel.lat_lon[1],
+                                incident.lat_lon[0],
+                                incident.lat_lon[1]
+                            );
+                            // console.log(distance);
+
+                            // If vessel is within 15km of incident
+                            if (distance <= 15) {
+                                const delay = await this.calculateDelay(incident, vessel);
+                                // console.log("sea wala delay", delay);
+                                if (delay > 0) {
+                                    // Create or update delay record
+                                    await Delay.findOneAndUpdate(
+                                        {
+                                            shipment: shipment._id,
+                                            location_type: 'sea'
+                                        },
+                                        {
+                                            $push: {
+                                                sea_delays: {
+                                                    incident: incident._id,
+                                                    delay_days: delay
+                                                }
+                                            }
+                                        },
+                                        { upsert: true, new: true }
+                                    );
+                                }
+                            }
+                        }
+
+                        // Mark incident as processed
+                        await Incident.findByIdAndUpdate(incident._id, { delay_updated: true });
+
                         results.details.push({
                             incidentId: incident._id,
                             type: 'sea',
-                            status: 'skipped',
-                            message: 'Sea incident processing to be implemented later'
+                            status: 'processed',
+                            message: 'Successfully processed sea incident'
                         });
-                        results.skipped++;
+                        results.processed++;
                         continue;
                     }
 
                     // Process port incidents
                     const affectedPorts = incident.affected_ports;
                     for (const port of affectedPorts) {
-                        // console.log(port.port_code);
                         // Find vessels that have this port in their events but no actual arrival time
                         const vessels = await VesselTracking.find({
                             'events': {
@@ -97,15 +165,22 @@ class DelayService {
                                 }
                             }
                         });
-                        // console.log(vessels);
+
                         for (const vessel of vessels) {
+                            // Get shipment ID from Shipment model using tracking ID
+                            const shipment = await Shipment.findOne({ tracking_id: vessel._id });
+                            if (!shipment) {
+                                console.log(`No shipment found for vessel tracking ID: ${vessel._id}`);
+                                continue;
+                            }
+
                             const delay = await this.calculateDelay(incident, vessel);
-                            // console.log(delay);
+                            // console.log("port wala delay", delay);
                             if (delay > 0) {
                                 // Create or update delay record
                                 await Delay.findOneAndUpdate(
                                     {
-                                        shipment: vessel.shipment_id,
+                                        shipment: shipment._id,
                                         location_type: 'port'
                                     },
                                     {
