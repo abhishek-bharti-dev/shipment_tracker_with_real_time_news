@@ -15,6 +15,8 @@ const getMapDataService = async (email) => {
 
         // 2. Get all shipments for the user
         const shipments = await Shipment.find({ client_id: user._id });
+        // console.log(shipments)
+        console.log("users's total shipments",shipments.length)
         // 3. Get delays for these shipments
         const delays = await Delay.find({ shipment: { $in: shipments.map(s => s._id) } });
         // Create map data structure
@@ -40,6 +42,7 @@ const getMapDataService = async (email) => {
         for (const delay of delays) {
             if (delay.location_type === 'port') {
                 // Handle port delays
+                console.log("hi ")
                 for (const portDelay of delay.affected_ports) {
                     const incident = await Incident.findById(portDelay.incident);
                     if (incident) {
@@ -60,6 +63,7 @@ const getMapDataService = async (email) => {
                 }
             } else {
                 // Handle sea delays
+                console.log("hello")
                 for (const seaDelay of delay.sea_delays) {
                     const incident = await Incident.findById(seaDelay.incident);
 
