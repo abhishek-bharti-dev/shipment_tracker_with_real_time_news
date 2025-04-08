@@ -1,114 +1,100 @@
 const Shipment = require('../models/Shipment');
 const Incident = require('../models/Incident');
 const Port = require('../models/Port');
+const User = require('../models/User');
+const VesselTracking = require('../models/VesselTracking');
+const Delay = require('../models/Delay');
 
 class ShipmentStatusService {
-    /**
-     * Calculate shipment status based on incident severity
-     * @param {number} severity - Incident severity (1-10)
-     * @returns {string} - Status category
-     */
     static getStatusFromSeverity(severity) {
         if (severity >= 8) return 'DANGER';
         if (severity >= 5) return 'CAUTION';
         return 'NOT_AFFECTED';
     }
 
-    /**
-     * Get shipment statistics for a specific client
-     * @param {string} clientId - Client's ID
-     * @returns {Promise<Object>} Shipment statistics
-     */
-    async getShipmentStatistics(clientId) {
+    async getShipmentStatistics(email) {
         try {
-            // Get all shipments for the client with tracking info
-            const shipments = await Shipment.find({ client_id: clientId })
+            const user = await User.findOne({ email }).select('_id').lean();
+            if (!user) throw new Error('User not found');
+
+            const shipments = await Shipment.find({ client_id: user._id })
                 .populate({
                     path: 'tracking_id',
-                    select: 'status current_port destination_port'
-                });
+                    match: { status: "intransit" },
+                    select: 'status',
+                })
+                .lean();
 
-            // Get all ongoing incidents with populated port information
-            const activeIncidents = await Incident.find({ 
-                status: 'ongoing',
-                severity: { $exists: true }
-            }).populate('affected_ports');
+            // Filter only shipments with tracking_id populated
+            const activeShipments = shipments.filter(s => s.tracking_id);
 
-            // Get all ports for reference
-            const ports = await Port.find({});
-            const portMap = new Map(ports.map(port => [port.port_code, port._id.toString()]));
-
-            let stats = {
-                shipmentInTransit: 0,
+            // Initialize stats
+            const stats = {
+                shipmentInTransit: activeShipments.length,
                 shipmentNotAffected: 0,
                 shipmentUnderCaution: 0,
                 shipmentUnderDanger: 0
             };
 
-            console.log('Processing shipments:', shipments.length);
-            console.log('Active incidents:', activeIncidents.length);
+            const shipmentIds = activeShipments.map(s => s._id);
 
-            // Process each shipment
-            for (const shipment of shipments) {
-                let highestSeverity = 0;
-                let isAffected = false;
+            // Get all delays in one query
+            const delays = await Delay.find({ shipment: { $in: shipmentIds } }).lean();
 
-                // Get port IDs for POL and POD
-                const polId = portMap.get(shipment.POL);
-                const podId = portMap.get(shipment.POD);
+            // Map shipmentId -> delay
+            const delayMap = new Map();
+            delays.forEach(delay => delayMap.set(delay.shipment.toString(), delay));
 
-                console.log(`Shipment ${shipment.shipment_id}:`);
-                console.log(`- POL: ${shipment.POL} (${polId})`);
-                console.log(`- POD: ${shipment.POD} (${podId})`);
+            // Collect all incident IDs
+            const incidentIdSet = new Set();
+            const shipmentToIncidents = new Map();
 
-                // Check if shipment is in transit
-                const isInTransit = shipment.tracking_id && 
-                    (shipment.tracking_id.status === 'IN_TRANSIT' || 
-                     shipment.tracking_id.status === 'DELAYED');
-                
-                if (isInTransit) {
-                    stats.shipmentInTransit++;
-                    console.log('- Status: In Transit');
-                }
+            for (const shipment of activeShipments) {
+                const delay = delayMap.get(shipment._id.toString());
 
-                // Check each incident
-                for (const incident of activeIncidents) {
-                    // Convert affected_ports to array of strings for comparison
-                    const affectedPortIds = incident.affected_ports.map(port => port._id.toString());
-
-                    // Check if either POL or POD is affected
-                    const isPortAffected = (polId && affectedPortIds.includes(polId)) || 
-                                        (podId && affectedPortIds.includes(podId));
-
-                    if (isPortAffected) {
-                        isAffected = true;
-                        highestSeverity = Math.max(highestSeverity, incident.severity);
-                        console.log(`- Affected by incident: severity ${incident.severity}`);
-                    }
-                }
-
-                // Determine status based on highest severity
-                if (isAffected) {
-                    const status = ShipmentStatusService.getStatusFromSeverity(highestSeverity);
-                    console.log(`- Final status: ${status}`);
-                    switch (status) {
-                        case 'DANGER':
-                            stats.shipmentUnderDanger++;
-                            break;
-                        case 'CAUTION':
-                            stats.shipmentUnderCaution++;
-                            break;
-                        default:
-                            stats.shipmentNotAffected++;
-                            break;
-                    }
-                } else {
+                if (!delay) {
                     stats.shipmentNotAffected++;
-                    console.log('- Final status: NOT_AFFECTED (no incidents)');
+                    continue;
                 }
+
+                let incidentIds = [];
+                if (delay.location_type === 'port') {
+                    incidentIds = delay.affected_ports.map(p => p.incident);
+                } else if (delay.location_type === 'sea') {
+                    incidentIds = delay.sea_delays.map(s => s.incident);
+                }
+
+                incidentIds.forEach(id => incidentIdSet.add(id.toString()));
+                shipmentToIncidents.set(shipment._id.toString(), incidentIds);
             }
 
-            console.log('Final stats:', stats);
+            // Fetch all incidents at once
+            const incidents = await Incident.find({ _id: { $in: Array.from(incidentIdSet) } }).lean();
+            const incidentSeverityMap = new Map();
+            incidents.forEach(inc => incidentSeverityMap.set(inc._id.toString(), inc.severity));
+
+            // Analyze incident severity per shipment
+            for (const shipment of activeShipments) {
+                const incidentIds = shipmentToIncidents.get(shipment._id.toString());
+                if (!incidentIds || incidentIds.length === 0) continue;
+
+                const severities = incidentIds
+                    .map(id => incidentSeverityMap.get(id.toString()))
+                    .filter(sev => typeof sev === 'number');
+
+                if (severities.length === 0) {
+                    stats.shipmentNotAffected++;
+                    continue;
+                }
+
+                const avgSeverity = severities.reduce((sum, s) => sum + s, 0) / severities.length;
+
+                if (avgSeverity >= 7) {
+                    stats.shipmentUnderDanger++;
+                } else {
+                    stats.shipmentUnderCaution++;
+                }
+            }
 
             return {
                 success: true,
@@ -124,4 +110,4 @@ class ShipmentStatusService {
     }
 }
 
-module.exports = new ShipmentStatusService(); 
+module.exports = new ShipmentStatusService();
