@@ -17,7 +17,7 @@ const emailRoutes = require('./routes/emailRoutes');
 const newsPipelineScheduler = require('./schedulers/news_pipeline');
 const incidentResolutionScheduler = require('./schedulers/incident_resolution_scheduler');
 const resolveIncidentRoutes = require('./routes/resolveIncidents');
-
+const graphDataRoutes = require('./routes/graphData');
 // Connect to MongoDB
 connectDB();
 
@@ -55,6 +55,8 @@ app.use('/api/presentation', vesselTrackingRoutes);
 // Mount incident routes
 app.use('/api/presentation', incidentRoutes);
 
+// Mount graph data routes
+app.use('/api/graph-data', graphDataRoutes);
 
 // Mount email routes
 app.use('/api/email', emailRoutes);
