@@ -10,7 +10,6 @@ const newsIngestionRoutes = require('./routes/newsIngestionRoutes');
 const mapVisualizationRoutes = require('./routes/mapVisualization');
 const vesselTrackingRoutes = require('./routes/vesselTrackingRoutes');
 const incidentRoutes = require('./routes/incidentRoutes');
-const emailRoutes = require('./routes/emailRoutes');
 const shipmentStatsRoutes = require('./routes/shipmentStatsRoutes');
 const delayRoutes = require('./routes/delayRoutes');
 // Import the news pipeline scheduler
