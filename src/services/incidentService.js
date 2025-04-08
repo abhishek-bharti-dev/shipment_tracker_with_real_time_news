@@ -9,6 +9,7 @@ const { search } = require('../routes/incidentRoutes');
 const imageExtractionService = require('./imageExtractionService');
 const geminiApi = require('./geminiApi');
 const delayService = require('./delayService');
+const emailService = require('./emailService');
 // const Vessel = require('../models/VesselTracking');
 
 class IncidentService {
@@ -35,7 +36,7 @@ class IncidentService {
                 status: incidentData.status.toLowerCase()
             });
 
-            // Update affected shipments
+            // Update affected shipments and send notifications
             for (const affectedShipment of incidentData.affected_shipments) {
                 const shipment = await Shipment.findOne({ bill_of_lading: affectedShipment.bill_of_lading });
                 if (shipment) {
@@ -44,6 +45,37 @@ class IncidentService {
                         lat_lon: [affectedShipment.current_coordinates.latitude, affectedShipment.current_coordinates.longitude],
                         expected_arrival: affectedShipment.expected_time_to_reach
                     });
+
+                    // Get user details for notification
+                    const user = await User.findById(shipment.client_id);
+                    if (user && user.email) {
+                        // Get vessel details for the notification
+                        const vesselDetails = await this.getVesselDetailsFromShipmentId(
+                            shipment._id,
+                            incident.severity,
+                            incidentData.news.summary
+                        );
+
+                        // Send detailed notification
+                        await emailService.sendDetailedIncidentNotification({
+                            to: user.email,
+                            incident: {
+                                type: incidentData.type,
+                                affected_area: incidentData.affected_area,
+                                severity: incident.severity,
+                                status: incident.status,
+                                news: [{
+                                    summary: incidentData.news.summary
+                                }]
+                            },
+                            shipment: {
+                                shipment_id: shipment.shipment_id,
+                                POL: shipment.POL,
+                                POD: shipment.POD
+                            },
+                            vessel: vesselDetails
+                        });
+                    }
                 }
             }
 
@@ -219,6 +251,14 @@ class IncidentService {
                                 summary
                             );
                             result.affected_shipments.push(shipment_details);
+
+                            // Send email notification for this incident
+                            try {
+                                await emailService.sendIncidentNotification(result, user.email);
+                                console.log(`Email notification sent to ${user.email} for incident ${incidentId}`);
+                            } catch (error) {
+                                console.error(`Error sending email notification to ${user.email}:`, error);
+                            }
                         }
                     }
                 } else {
