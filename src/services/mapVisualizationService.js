@@ -7,97 +7,94 @@ const VesselTracking = require('../models/VesselTracking');
 
 const getMapDataService = async (email) => {
     try {
-        // 1. Get user by email
         const user = await User.findOne({ email });
-        if (!user) {
-            throw new Error('User not found');
+        if (!user) throw new Error('User not found');
+
+        // 1. Get all shipments for the user
+        const shipments = await Shipment.find({ client_id: user._id })
+            .populate({
+                path: 'tracking_id',
+                match: { status: "intransit" },
+                select: 'status vessel_name lat_lon',
+            })
+            .lean();
+
+        const shipmentIds = shipments.map(s => s._id);
+        const delays = await Delay.find({ shipment: { $in: shipmentIds } }).lean();
+
+        // 2. Collect all incident and port IDs
+        const incidentIds = new Set();
+        const portIds = new Set();
+        for (const delay of delays) {
+            if (delay.affected_ports) {
+                for (const portDelay of delay.affected_ports) {
+                    if (portDelay?.incident) incidentIds.add(portDelay.incident.toString());
+                    if (portDelay?.port) portIds.add(portDelay.port.toString());
+                }
+            }
+            if (delay.sea_delays) {
+                for (const seaDelay of delay.sea_delays) {
+                    if (seaDelay?.incident) incidentIds.add(seaDelay.incident.toString());
+                }
+            }
         }
 
-        // 2. Get all shipments for the user
-        const shipments = await Shipment.find({ client_id: user._id });
-        // console.log(shipments)
-        console.log("users's total shipments",shipments.length)
-        // 3. Get delays for these shipments
-        const delays = await Delay.find({ shipment: { $in: shipments.map(s => s._id) } });
-        // Create map data structure
+        // 3. Fetch all incidents and ports in bulk
+        const incidents = await Incident.find({ _id: { $in: Array.from(incidentIds) } }).lean();
+        const ports = await Port.find({ _id: { $in: Array.from(portIds) } }).lean();
+
+        const incidentMap = new Map(incidents.map(i => [i._id.toString(), i]));
+        const portMap = new Map(ports.map(p => [p._id.toString(), p.lat_lon]));
+
+        // 4. Initialize mapData
         const mapData = {
-            danger: {
-                coordinates: [],
-                names: [],
-                radius: []
-            },
-            caution: {
-                coordinates: [],
-                names: [],
-                radius: []
-            },
-            normal: {
-                coordinates: [],
-                names: [],
-                radius: []
-            }
+            danger: { coordinates: [], names: [], radius: [] },
+            caution: { coordinates: [], names: [], radius: [] },
+            normal: { coordinates: [], names: [], radius: [] }
         };
 
-        // 4. Process delays and their incidents
+        // 5. Process delays
         for (const delay of delays) {
             if (delay.location_type === 'port') {
-                // Handle port delays
-                console.log("hi ")
-                for (const portDelay of delay.affected_ports) {
-                    const incident = await Incident.findById(portDelay.incident);
-                    if (incident) {
-                        let coordinates = await Port.findById(portDelay.port);
-                        coordinates = coordinates.lat_lon;
-                        if (coordinates && coordinates.length === 2) {
-                            if (incident.severity >= 7) {
-                                mapData.danger.coordinates.push(coordinates);
-                                mapData.danger.names.push(portDelay.port_name);
-                                mapData.danger.radius.push(15);
-                            } else {
-                                mapData.caution.coordinates.push(coordinates);
-                                mapData.caution.names.push(portDelay.port_name);
-                                mapData.caution.radius.push(15);
-                            }
-                        }
+                for (const portDelay of delay.affected_ports || []) {
+                    const incident = incidentMap.get(portDelay.incident?.toString());
+                    const coordinates = portMap.get(portDelay.port?.toString());
+                    if (incident && coordinates?.length === 2) {
+                        const severity = incident.severity;
+                        const category = severity >= 7 ? 'danger' : 'caution';
+                        mapData[category].coordinates.push(coordinates);
+                        mapData[category].names.push(portDelay.port_name || 'Port');
+                        mapData[category].radius.push(15);
                     }
                 }
             } else {
-                // Handle sea delays
-                console.log("hello")
-                for (const seaDelay of delay.sea_delays) {
-                    const incident = await Incident.findById(seaDelay.incident);
-
-                    if (incident) {
-                        const coordinates = incident.lat_lon;
-                        if (coordinates && coordinates.length === 2) {
-                            if (incident.severity >= 7) {
-                                mapData.danger.coordinates.push(coordinates);
-                                mapData.danger.names.push('Sea Incident');
-                                mapData.danger.radius.push(15);
-                            } else {
-                                mapData.caution.coordinates.push(coordinates);
-                                mapData.caution.names.push('Sea Incident');
-                                mapData.caution.radius.push(15);
-                            }
-                        }
+                for (const seaDelay of delay.sea_delays || []) {
+                    const incident = incidentMap.get(seaDelay.incident?.toString());
+                    if (incident && incident.lat_lon?.length === 2) {
+                        const severity = incident.severity;
+                        const category = severity >= 7 ? 'danger' : 'caution';
+                        mapData[category].coordinates.push(incident.lat_lon);
+                        mapData[category].names.push('Sea Incident');
+                        mapData[category].radius.push(15);
                     }
                 }
             }
         }
 
-        // 5. Get vessel tracking data for shipments without delays
-        const delayedShipmentIds = delays.map(d => d.shipment.toString());
-        const shipmentsWithoutDelays = shipments.filter(s => 
-            !delayedShipmentIds.includes(s._id.toString())
-        );
-        for (const shipment of shipmentsWithoutDelays) {
-            const vesselTracking = await VesselTracking.findById(shipment.tracking_id);
-            if (vesselTracking && vesselTracking.lat_lon && vesselTracking.lat_lon.length === 2) {
-                mapData.normal.coordinates.push(vesselTracking.lat_lon);
-                mapData.normal.names.push(vesselTracking.vessel_name);
+        // 6. Find shipments without delays
+        const delayedShipmentIds = new Set(delays.map(d => d.shipment?.toString()));
+        const normalShipments = shipments.filter(s => !delayedShipmentIds.has(s._id.toString()));
+
+        // 7. Add normal vessels
+        for (const shipment of normalShipments) {
+            const tracking = shipment.tracking_id;
+            if (tracking?.lat_lon?.length === 2) {
+                mapData.normal.coordinates.push(tracking.lat_lon);
+                mapData.normal.names.push(tracking.vessel_name || 'Vessel');
                 mapData.normal.radius.push(5);
             }
         }
+
         return mapData;
     } catch (error) {
         console.error('Error in getMapDataService:', error);
@@ -107,4 +104,4 @@ const getMapDataService = async (email) => {
 
 module.exports = {
     getMapDataService
-}; 
+};
