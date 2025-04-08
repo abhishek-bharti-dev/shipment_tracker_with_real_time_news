@@ -6,7 +6,7 @@ const Incident = require('../models/Incident');
 const User = require('../models/User');
 const Shipment = require('../models/Shipment');
 const emailService = require('./emailService');
-
+const notificationHandler = require('../handlers/notificationHandler');
 class DelayService {
     // Haversine formula to calculate distance between two points on Earth
     calculateDistance(lat1, lon1, lat2, lon2) {
@@ -276,7 +276,7 @@ class DelayService {
 
             // Convert map to array and add to results
             results.delayNotifications = Array.from(notificationMap.values());
-            emailService.sendIncidentNotification(results.delayNotifications);
+            notificationHandler.processNotifications(results.delayNotifications);
 
             // Return the results without sending emails
             return results;

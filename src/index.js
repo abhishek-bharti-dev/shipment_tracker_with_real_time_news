@@ -12,6 +12,7 @@ const vesselTrackingRoutes = require('./routes/vesselTrackingRoutes');
 const incidentRoutes = require('./routes/incidentRoutes');
 const shipmentStatsRoutes = require('./routes/shipmentStatsRoutes');
 const delayRoutes = require('./routes/delayRoutes');
+const emailRoutes = require('./routes/emailRoutes');
 // Import the news pipeline scheduler
 const newsPipelineScheduler = require('./schedulers/news_pipeline');
 const incidentResolutionScheduler = require('./schedulers/incident_resolution_scheduler');
