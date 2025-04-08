@@ -10,7 +10,6 @@ const newsIngestionRoutes = require('./routes/newsIngestionRoutes');
 const mapVisualizationRoutes = require('./routes/mapVisualization');
 const vesselTrackingRoutes = require('./routes/vesselTrackingRoutes');
 const incidentRoutes = require('./routes/incidentRoutes');
-const emailRoutes = require('./routes/emailRoutes');
 const shipmentStatsRoutes = require('./routes/shipmentStatsRoutes');
 // Import the news pipeline scheduler
 const scheduler = require('./schedulers/news_pipeline');
@@ -51,9 +50,6 @@ app.use('/api/presentation', vesselTrackingRoutes);
 
 // Mount incident routes
 app.use('/api/presentation', incidentRoutes);
-
-// Mount email routes
-app.use('/api/email', emailRoutes);
 
 // Mount shipment stats routes
 app.use('/api/shipment-stats', shipmentStatsRoutes);

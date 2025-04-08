@@ -2,17 +2,15 @@ const axios = require('axios');
 
 class EmailService {
     constructor() {
-        // The Zapier webhook URL should be set in environment variables
         this.zapierWebhookUrl = process.env.ZAPIER_WEBHOOK_URL;
     }
 
     /**
      * Sends an email through Zapier webhook
      * @param {Object} emailData - The email data object
-     * @param {string} emailData.to - Recipient email address
-     * @param {string} emailData.subject - Email subject
-     * @param {string} emailData.body - Email body content
-     * @param {Object} [emailData.additionalData] - Any additional data to be sent to Zapier
+     * @param {string} emailData.email - Recipient email
+     * @param {string} emailData.subject - Subject line of the email
+     * @param {string} emailData.message - Body of the email (plain or HTML)
      * @returns {Promise<Object>} Response from Zapier
      */
     async sendEmail(emailData) {
@@ -21,20 +19,13 @@ class EmailService {
                 throw new Error('Zapier webhook URL is not configured');
             }
 
-            if (!emailData.to || !emailData.subject || !emailData.body) {
-                throw new Error('Missing required email fields (to, subject, or body)');
-            }
+            const { email, subject, message } = emailData;
 
-            // Format the data for Zapier
-            const zapierData = {
-                email: emailData.to,
-                subject: emailData.subject,
-                message: emailData.body,
-                ...emailData.additionalData
-            };
-
-            // Send the data to Zapier webhook
-            const response = await axios.post(this.zapierWebhookUrl, zapierData);
+            const response = await axios.post(this.zapierWebhookUrl, {
+                email,
+                subject,
+                message,
+            });
 
             return {
                 success: true,
@@ -42,7 +33,7 @@ class EmailService {
                 data: response.data
             };
         } catch (error) {
-            console.error('Error sending email:', error);
+            console.error('Error sending email:', error.message);
             return {
                 success: false,
                 message: error.message,
@@ -52,75 +43,87 @@ class EmailService {
     }
 
     /**
-     * Sends a notification email for incidents
-     * @param {Object} incidentData - The incident notification data
-     * @param {string} incidentData.to - Recipient email address
-     * @param {string} incidentData.incidentType - Type of incident
-     * @param {string} incidentData.location - Location of incident
-     * @param {string} incidentData.severity - Severity level
-     * @param {string} incidentData.description - Incident description
+     * Sends a detailed incident notification with dynamic subject
+     * @param {Object} data - Incident and shipment data
      * @returns {Promise<Object>} Response from email sending attempt
      */
-    async sendIncidentNotification(incidentData) {
-        const emailContent = {
-            to: incidentData.to,
-            subject: `Incident Alert: ${incidentData.incidentType} at ${incidentData.location}`,
-            body: `
-                Incident Notification
-                
-                Type: ${incidentData.incidentType}
-                Location: ${incidentData.location}
-                Severity: ${incidentData.severity}
-                
-                Description:
-                ${incidentData.description}
-                
-                Please check your dashboard for more details.
-            `,
-            additionalData: {
-                incidentType: incidentData.incidentType,
-                severity: incidentData.severity,
-                location: incidentData.location
-            }
-        };
+    async sendDetailedIncidentNotification(data) {
+        const {
+            userName,
+            userEmail,
+            shipmentId,
+            delayType,
+            seaIssues,
+            affectedPorts,
+            totalDelay
+        } = data;
 
-        return this.sendEmail(emailContent);
-    }
+        const startDate = new Date(seaIssues[0]?.startDate || affectedPorts[0]?.startDate).toISOString().split('T')[0];
+        const endDate = new Date(new Date(startDate).getTime() + totalDelay * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-    /**
-     * Sends a delay notification email
-     * @param {Object} delayData - The delay notification data
-     * @param {string} delayData.to - Recipient email address
-     * @param {string} delayData.shipmentId - Shipment ID
-     * @param {string} delayData.vesselName - Vessel name
-     * @param {number} delayData.delayDuration - Delay duration in days
-     * @param {string} delayData.reason - Reason for delay
-     * @returns {Promise<Object>} Response from email sending attempt
-     */
-    async sendDelayNotification(delayData) {
-        const emailContent = {
-            to: delayData.to,
-            subject: `Shipment Delay Alert: ${delayData.shipmentId}`,
-            body: `
-                Delay Notification
-                
-                Shipment ID: ${delayData.shipmentId}
-                Vessel: ${delayData.vesselName}
-                Delay Duration: ${delayData.delayDuration} days
-                
-                Reason for Delay:
-                ${delayData.reason}
-                
-                Please check your dashboard for more details and updates.
-            `,
-            additionalData: {
-                shipmentId: delayData.shipmentId,
-                delayDuration: delayData.delayDuration,
-                vesselName: delayData.vesselName
-            }
-        };
+        const incidentDetails = delayType === 'sea' ? seaIssues[0] : affectedPorts[0];
+        const location = delayType === 'sea' ? 'Red Sea' : affectedPorts.map(p => p.portName).join(', ');
 
-        return this.sendEmail(emailContent);
+        const severity = totalDelay >= 20 ? 9.2 : totalDelay >= 10 ? 7.5 : 5.0;
+        const severityText = severity >= 8 ? 'Severe' : severity >= 5 ? 'Moderate' : 'Mild';
+
+        const subject = `🚨 Shipping Disruption Alert: ${delayType === 'sea' ? 'Sea Route' : 'Port Operations'} - ${location}`;
+        const message = `
+<div style="font-family: Arial, sans-serif; color: #333; line-height: 1.6;">
+  <p>Dear ${userName},</p>
+
+  <p>We are writing to inform you of a <strong>recent shipping disruption</strong> that may impact your shipment(s). Please find the details below:</p>
+
+  <h2 style="color: #1a73e8;">🚢 Incident Details</h2>
+  <ul>
+    <li><strong>Affected Port:</strong> ${location}</li>
+    <li><strong>Disruption Type:</strong> ${delayType === 'sea' ? 'Sea Route Disruption' : 'Port Operations Disruption'}</li>
+    <li><strong>Cause:</strong> ${incidentDetails.reason}</li>
+    <li><strong>Start Date:</strong> ${startDate}</li>
+    <li><strong>Expected End Date:</strong> ${endDate}</li>
+    <li><strong>Severity:</strong> ${severityText} (${severity}/10)</li>
+  </ul>
+
+  <h2 style="color: #f9a825;">📦 Impact on Your Shipment(s)</h2>
+  <ul>
+    <li><strong>Shipment ID(s):</strong> #${shipmentId}</li>
+    <li><strong>Estimated Delay:</strong> ${totalDelay} Days</li>
+    <li><strong>Operational Status:</strong> ${severity >= 8 ? 'Limited Operations' : severity >= 5 ? 'Partially Open' : 'Operational'}</li>
+    <li><strong>Alternative Route Available:</strong> ${delayType === 'sea' ? 'Yes' : 'No'}</li>
+  </ul>
+
+  <h2 style="color: #d32f2f;">⚠️ Recommended Action</h2>
+  <ul>
+    <li><strong>🛡️ Monitor updates:</strong> We will continue tracking the situation and notify you of any changes.</li>
+    <li><strong>📍 Consider rerouting:</strong> If the delay is critical, we recommend evaluating alternative routes.</li>
+    <li><strong>📞 Contact support:</strong> If you require assistance, please reach out to your logistics manager at <a href="mailto:support@gocomet.com">support@gocomet.com</a>.</li>
+  </ul>
+
+  <p>We understand that shipping delays can be costly and disruptive. Our team is actively monitoring this situation and will provide updates as they become available.</p>
+
+  <p>For more details, visit your dashboard: <a href="https://dashboard.gocomet.com">Track Your Shipment Here</a></p>
+
+  <p>Best regards,<br>
+  <strong>Gocomet</strong><br>
+  Shipment Monitoring Team<br>
+  📧 <a href="mailto:support@yourcompany.com">support@yourcompany.com</a> | 📞 +1 (800) 123-4567</p>
+
+  <hr>
+
+  <div style="text-align: center; margin-top: 20px;">
+   <a href="https://www.gocomet.com" style="text-decoration: none;">
+        <img src="https://drive.google.com/uc?export=view&id=1qHXqbGf6JSkBzh8Rm2KirfytXI-xNTSv" alt="G2 Leader 2024 Badge" style="width: 100%; max-width: 500px; border-radius: 8px;">
+    </a>
+
+    <p style="font-size: 0.9em; color: #888;">⭐ 4.8/5 on G2</p>
+  </div>
+</div>
+`;
+        return this.sendEmail({
+            email: userEmail,
+            subject,
+            message
+        });
     }
 }
 
