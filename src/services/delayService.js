@@ -277,7 +277,7 @@ class DelayService {
 
             // Convert map to array and add to results
             results.delayNotifications = Array.from(notificationMap.values());
-            // notificationHandler.processNotifications(results.delayNotifications);
+            notificationHandler.processNotifications(results.delayNotifications);
 
             // Return the results without sending emails
             return results;
