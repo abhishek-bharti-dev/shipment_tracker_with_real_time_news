@@ -227,38 +227,19 @@ class IncidentService {
                         }
 
                         if (result.news.length === 0) {
-                            let imageUrl = newsItem.url;
-                            try {
-                                const imageResult = await imageExtractionService.extractImageFromArticle(newsItem.url);
-                                if (imageResult.imageUrl) {
-                                    imageUrl = imageResult.imageUrl;
-                                }
-                            } catch (error) {
-                                console.error('Error extracting image:', error);
-                            }
-
-                            const summary = await geminiApi.generateSummary(newsItem.news_details);
                             result.news.push({
                                 title: newsItem.title,
                                 url: newsItem.url,
-                                image: imageUrl,
+                                image: newsItem.image,
                                 summary: newsItem.news_details
                             });
 
                             const shipment_details = await this.getVesselDetailsFromShipmentId(
                                 delay.shipment,
                                 incident.severity,
-                                summary
+                                newsItem.summary
                             );
                             result.affected_shipments.push(shipment_details);
-
-                            // Send email notification for this incident
-                            try {
-                                await emailService.sendIncidentNotification(result, user.email);
-                                console.log(`Email notification sent to ${user.email} for incident ${incidentId}`);
-                            } catch (error) {
-                                console.error(`Error sending email notification to ${user.email}:`, error);
-                            }
                         }
                     }
                 } else {
