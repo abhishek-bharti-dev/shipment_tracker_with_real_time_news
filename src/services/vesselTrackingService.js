@@ -24,8 +24,11 @@ class VesselTrackingService {
 
             // Process each shipment sequentially
             for (const shipment of shipments) {
-                // Get vessel details using tracking_id
-                const vessel = await VesselTracking.findOne({ _id: shipment.tracking_id });
+                // Get vessel details using tracking_id and check if status is "intransit"
+                const vessel = await VesselTracking.findOne({ 
+                    _id: shipment.tracking_id,
+                    status: "intransit"
+                });
                 if (!vessel) continue;
 
                 // Get delay information for this shipment
@@ -36,6 +39,8 @@ class VesselTrackingService {
                 let impactScore = 0;
 
                 if (delay) {
+                    console.log(" let's fix it")
+                    console.log("delay: ", delay);
                     if (delay.location_type === 'port') {
                         // Sum up port delays
                         totalDelayDays = delay.affected_ports.reduce((sum, port) => sum + port.delay_days, 0);
