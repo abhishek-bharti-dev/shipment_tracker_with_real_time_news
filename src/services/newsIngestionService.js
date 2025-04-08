@@ -3,6 +3,8 @@ const Port = require('../models/Port');
 const Incident = require('../models/Incident');
 const crypto = require('crypto');
 const mongoose = require('mongoose');
+const imageExtractionService = require('./imageExtractionService');
+const geminiApi = require('./geminiApi');
 
 // Create a hash of the news content to check for duplicates
 function generateNewsHash(newsData) {
@@ -58,6 +60,26 @@ async function processNewsItem(newsItem) {
                 reason: 'Duplicate news item'
             };
         }
+
+        // Extract image from the article
+        let image = null;
+        try {
+            const imageResult = await imageExtractionService.extractImageFromArticle(url);
+            if (imageResult.imageUrl) {
+                image = imageResult.imageUrl;
+            }
+        } catch (error) {
+            console.error('Error extracting image:', error);
+        }
+
+        // Generate summary using Gemini API
+        let summary = null;
+        try {
+            summary = await geminiApi.generateSummary(news_details);
+        } catch (error) {
+            console.error('Error generating summary:', error);
+            summary = news_details.substring(0, 100) + '...'; // Fallback to first 100 characters
+        }
         
         // Create new news document
         const news = new News({
@@ -66,7 +88,9 @@ async function processNewsItem(newsItem) {
             url,
             news_details,
             published_date,
-            news_location
+            news_location,
+            image,
+            summary
         });
         
         // Save news to database
