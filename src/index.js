@@ -85,8 +85,8 @@ const startServer = (portToTry) => {
     // Start the schedulers only after the server is running
     // Add a small delay to ensure everything is properly initialized
     setTimeout(() => {
-      // newsPipelineScheduler.start();
-      // incidentResolutionScheduler.start();
+      newsPipelineScheduler.start();
+      incidentResolutionScheduler.start();
     }, 1000);
   }).on('error', (err) => {
     if (err.code === 'EADDRINUSE') {
