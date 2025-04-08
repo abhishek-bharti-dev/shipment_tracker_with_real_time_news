@@ -50,6 +50,14 @@ const incidentSchema = new mongoose.Schema({
   delay_updated: {
     type: Boolean,
     default: false
+  },
+  total_shipments_affected: {
+    type: Number,
+    default: 0
+  },
+  total_shipments_resolved:{
+    type: Number,
+    default: 0
   }
 }, {
   timestamps: true
