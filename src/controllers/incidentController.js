@@ -120,10 +120,28 @@ const processUnupdatedDelayIncidents = async (req, res) => {
     }
 };
 
+const resolveIncidents = async (req, res) => {
+    try {
+        const results = await resolveIncidentService.resolveIncidents();
+        res.status(200).json({
+            success: true,
+            message: 'Successfully resolved incidents',
+            data: results
+        });
+    } catch (error) {
+        console.error('Error in resolveIncidents controller:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error resolving incidents',
+            error: error.message
+        });
+    }
+}
 module.exports = {
     createIncident,
     getIncidents,
     getIncidentById,
     updateIncidentStatus,
-    processUnupdatedDelayIncidents
+    processUnupdatedDelayIncidents,
+    resolveIncidents
 }; 

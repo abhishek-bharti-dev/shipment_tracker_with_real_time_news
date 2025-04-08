@@ -14,7 +14,9 @@ const emailRoutes = require('./routes/emailRoutes');
 const shipmentStatsRoutes = require('./routes/shipmentStatsRoutes');
 const delayRoutes = require('./routes/delayRoutes');
 // Import the news pipeline scheduler
-const scheduler = require('./schedulers/news_pipeline');
+const newsPipelineScheduler = require('./schedulers/news_pipeline');
+const incidentResolutionScheduler = require('./schedulers/incident_resolution_scheduler');
+const resolveIncidentRoutes = require('./routes/resolveIncidents');
 
 // Connect to MongoDB
 connectDB();
@@ -53,6 +55,7 @@ app.use('/api/presentation', vesselTrackingRoutes);
 // Mount incident routes
 app.use('/api/presentation', incidentRoutes);
 
+
 // Mount email routes
 app.use('/api/email', emailRoutes);
 
@@ -61,6 +64,9 @@ app.use('/api/shipment-stats', shipmentStatsRoutes);
 
 // Mount delay routes
 app.use('/api/delays', delayRoutes);
+
+// Mount resolve incident routes
+app.use('/api/delays', resolveIncidentRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
@@ -74,10 +80,11 @@ const startServer = (portToTry) => {
     console.log(`\n🚀 Server is running on port ${portToTry}`);
     console.log('⏰ Current time:', new Date().toISOString());
     
-    // Start the scheduler only after the server is running
+    // Start the schedulers only after the server is running
     // Add a small delay to ensure everything is properly initialized
     setTimeout(() => {
-      scheduler.start();
+      newsPipelineScheduler.start();
+      incidentResolutionScheduler.start();
     }, 1000);
   }).on('error', (err) => {
     if (err.code === 'EADDRINUSE') {
@@ -91,7 +98,7 @@ const startServer = (portToTry) => {
   // Handle graceful shutdown
   const shutdown = () => {
     console.log('\n🛑 Shutting down server...');
-    scheduler.stop();
+    newsPipelineScheduler.stop();
     server.close(() => {
       console.log('✅ HTTP server closed');
       mongoose.connection.close(false, () => {
