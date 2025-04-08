@@ -102,7 +102,7 @@ class DelayService {
 
                         for (const vessel of vesselsInTransit) {
                             // Get shipment ID from Shipment model using tracking ID
-                            const shipment = await Shipment.findOne({ tracking_id: vessel._id });
+                            const shipment = await Shipment.findOne({ tracking_id: vessel._id }).populate('client_id');
                             if (!shipment) {
                                 console.log(`No shipment found for vessel tracking ID: ${vessel._id}`);
                                 continue;
@@ -139,7 +139,9 @@ class DelayService {
                                     
                                     if (updatedDelay) {
                                         console.log("this is from delay service");
-                                        // console.log(shipment);
+                                        console.log(shipment);
+                                        console.log(shipment.client_id.name);
+                                        console.log(shipment.client_id.email);
                                         // console.log(shipment.client_id);
                                         const key = `${shipment.client_id._id}-${shipment._id}`;
                                         console.log(key);
