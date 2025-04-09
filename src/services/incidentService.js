@@ -168,11 +168,12 @@ class IncidentService {
                 .filter(shipment => activeVessels.some(vessel => vessel._id.toString() === shipment.tracking_id.toString()))
                 .map(s => s._id);
             
-            console.log("activeShipmentIds", activeShipmentIds);
+            // console.log("activeShipmentIds", activeShipmentIds);
             
             // 3. Get delays for these shipments
             const delays = await Delay.find({ shipment: { $in: activeShipmentIds } });
-            console.log("delays",delays.length);
+            // console.log("delays",delays);
+            // console.log("delays",delays.length);
 
             // 4. Get all unique incident IDs and port IDs
             const incidentIds = new Set();
@@ -254,7 +255,7 @@ class IncidentService {
                     }));
                 } else {
                     formattedIncident.affected_area = [{
-                        name: 'Sea Incident',
+                        name: incident.source_news.news_location,
                         coordinates: {
                             latitude: incident.lat_lon[0],
                             longitude: incident.lat_lon[1]
@@ -271,6 +272,9 @@ class IncidentService {
                     )
                 );
 
+                console.log(`\nProcessing incident: ${incident._id}`);
+                console.log(`Number of affected delays: ${affectedDelays.length}`);
+
                 // Process each affected delay
                 for (const delay of affectedDelays) {
                     const shipment = await Shipment.findById(delay.shipment);
@@ -278,6 +282,20 @@ class IncidentService {
 
                     const vessel = await VesselTracking.findById(shipment.tracking_id);
                     if (!vessel) continue;
+
+                    console.log(`Shipment ID: ${shipment._id}, Incident ID: ${incident._id}`);
+                    if (delay.location_type === 'port') {
+                        console.log('Port delays:', delay.affected_ports.map(p => ({
+                            port: p.port,
+                            incident: p.incident,
+                            delay_days: p.delay_days
+                        })));
+                    } else {
+                        console.log('Sea delays:', delay.sea_delays.map(s => ({
+                            incident: s.incident,
+                            delay_days: s.delay_days
+                        })));
+                    }
 
                     formattedIncident.affected_shipments.push({
                         vessel_name: vessel.vessel_name,
