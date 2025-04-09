@@ -153,10 +153,26 @@ class IncidentService {
 
             // 2. Get all shipments for the user
             const userShipments = await Shipment.find({ client_id: user._id });
-            const shipmentIds = userShipments.map(s => s._id);
-
+            
+            // Get all vessel tracking IDs from shipments
+            const vesselTrackingIds = userShipments.map(s => s.tracking_id);
+            
+            // Get all vessels with 'intransit' status
+            const activeVessels = await VesselTracking.find({
+                _id: { $in: vesselTrackingIds },
+                status: 'intransit'
+            });
+            
+            // Filter shipments to only include those with active vessels
+            const activeShipmentIds = userShipments
+                .filter(shipment => activeVessels.some(vessel => vessel._id.toString() === shipment.tracking_id.toString()))
+                .map(s => s._id);
+            
+            console.log("activeShipmentIds", activeShipmentIds);
+            
             // 3. Get delays for these shipments
-            const delays = await Delay.find({ shipment: { $in: shipmentIds } });
+            const delays = await Delay.find({ shipment: { $in: activeShipmentIds } });
+            console.log("delays",delays.length);
 
             // 4. Get all unique incident IDs and port IDs
             const incidentIds = new Set();
@@ -164,114 +180,125 @@ class IncidentService {
             
             delays.forEach(delay => {
                 if (delay.location_type === 'port') {
+                    console.log("shipment id",delay.shipment);
+                    console.log("delay id",delay._id);
+                    console.log("delay.affected_ports",delay.affected_ports);
                     delay.affected_ports.forEach(port => {
                         incidentIds.add(port.incident.toString());
                         portIds.add(port.port.toString());
                     });
                 } else {
+                    console.log("shipment id",delay.shipment);
+                    console.log("delay id",delay._id);
+                    console.log("delay.sea_delays",delay.sea_delays);
                     delay.sea_delays.forEach(sea => {
                         incidentIds.add(sea.incident.toString());
                     });
                 }
             });
+            // console.log("main incidentIds",incidentIds);
 
-            // 5. Batch fetch all required data
-            const [incidents, ports] = await Promise.all([
-                Incident.find({ _id: { $in: Array.from(incidentIds) } }),
-                Port.find({ _id: { $in: Array.from(portIds) } })
-            ]);
-
-            // 6. Get news data for all incidents
-            const newsIds = incidents.map(incident => incident.source_news.toString());
-            const news = await News.find({ _id: { $in: newsIds } });
-
-            // 7. Create lookup maps for faster access
-            const incidentMap = new Map(incidents.map(i => [i._id.toString(), i]));
-            const newsMap = new Map(news.map(n => [n._id.toString(), n]));
-            const portMap = new Map(ports.map(p => [p._id.toString(), p]));
-
-            // 8. Process delays and build result
-            let resultMap = new Map();
+            // 5. Get all incidents and their related news
+            const incidents = await Incident.find({ _id: { $in: Array.from(incidentIds) } })
+                .populate('source_news');
             
-            // Process all delays in parallel
-            await Promise.all(delays.map(async delay => {
-                if (delay.location_type === 'port') {
-                    for (const port of delay.affected_ports) {
-                        const incidentId = port.incident.toString();
-                        const incident = incidentMap.get(incidentId);
-                        const newsItem = newsMap.get(incident.source_news.toString());
-                        const portDetails = portMap.get(port.port.toString());
+            console.log("total incidents length",incidents.length);
 
-                        if (!resultMap.has(incidentId)) {
-                            resultMap.set(incidentId, {
-                                id: incidentId,
-                                type: 'Port Incident',
-                                news: [],
-                                affected_area: [],
-                                affected_shipments: [],
-                                severity: incident.severity >= 8 ? 'High' : incident.severity >= 5 ? 'Medium' : 'Low',
-                                status: incident.status
-                            });
+            // 6. Get all ports
+            const ports = await Port.find({ _id: { $in: Array.from(portIds) } });
+            console.log("total ports length",ports.length);
+            // 7. Create a map to store formatted incidents
+            const resultMap = new Map();
+
+            // 8. Format each incident
+            for (const incident of incidents) {
+                const formattedIncident = {
+                    id: incident._id.toString(),
+                    type: incident.location_type === 'port' ? 'Port Incident' : 'Sea Incident',
+                    news: [{
+                        title: incident.source_news.title,
+                        url: incident.source_news.url,
+                        image: incident.source_news.image,
+                        summary: incident.source_news.summary
+                    }],
+                    affected_area: [],
+                    affected_shipments: [],
+                    severity: this.getSeverityText(incident.severity),
+                    status: incident.status
+                };
+
+                // Add affected areas
+                if (incident.location_type === 'port') {
+                    // Find ports affected by this incident through the delays
+                    const affectedDelays = delays.filter(delay => 
+                        delay.location_type === 'port' &&
+                        delay.affected_ports.some(port => port.incident.toString() === incident._id.toString())
+                    );
+                    
+                    const affectedPortIds = affectedDelays.flatMap(delay => 
+                        delay.affected_ports
+                            .filter(port => port.incident.toString() === incident._id.toString())
+                            .map(port => port.port)
+                    );
+                    
+                    const affectedPorts = ports.filter(port => 
+                        affectedPortIds.some(portId => portId.toString() === port._id.toString())
+                    );
+                    
+                    formattedIncident.affected_area = affectedPorts.map(port => ({
+                        name: port.port_name,
+                        coordinates: {
+                            latitude: port.lat_lon[0],
+                            longitude: port.lat_lon[1]
                         }
-
-                        const result = resultMap.get(incidentId);
-                        
-                        if (portDetails) {
-                            result.affected_area.push({
-                                name: portDetails.port_name,
-                                coordinates: {
-                                    latitude: portDetails.lat_lon[0],
-                                    longitude: portDetails.lat_lon[1]
-                                }
-                            });
-                        }
-
-                        if (result.news.length === 0) {
-                            result.news.push({
-                                title: newsItem.title,
-                                url: newsItem.url,
-                                image: newsItem.image,
-                                summary: newsItem.news_details
-                            });
-
-                            const shipment_details = await this.getVesselDetailsFromShipmentId(
-                                delay.shipment,
-                                incident.severity,
-                                newsItem.summary
-                            );
-                            result.affected_shipments.push(shipment_details);
-                        }
-                    }
+                    }));
                 } else {
-                    for (const sea of delay.sea_delays) {
-                        const incidentId = sea.incident.toString();
-                        const incident = incidentMap.get(incidentId);
-
-                        if (!resultMap.has(incidentId)) {
-                            resultMap.set(incidentId, {
-                                id: incidentId,
-                                type: 'Sea Incident',
-                                news: [],
-                                affected_area: [],
-                                affected_shipments: [],
-                                severity: incident.severity >= 8 ? 'High' : incident.severity >= 5 ? 'Medium' : 'Low',
-                                status: incident.status
-                            });
+                    formattedIncident.affected_area = [{
+                        name: 'Sea Incident',
+                        coordinates: {
+                            latitude: incident.lat_lon[0],
+                            longitude: incident.lat_lon[1]
                         }
-
-                        resultMap.get(incidentId).affected_area.push({
-                            name: "Sea Incident",
-                            coordinates: {
-                                latitude: sea.lat_lon[0],
-                                longitude: sea.lat_lon[1]
-                            }
-                        });
-                    }
+                    }];
                 }
-            }));
+
+                // Add affected shipments
+                const affectedDelays = delays.filter(delay => 
+                    delay.location_type === incident.location_type &&
+                    (delay.location_type === 'port' 
+                        ? delay.affected_ports.some(port => port.incident.toString() === incident._id.toString())
+                        : delay.sea_delays.some(sea => sea.incident.toString() === incident._id.toString())
+                    )
+                );
+
+                // Process each affected delay
+                for (const delay of affectedDelays) {
+                    const shipment = await Shipment.findById(delay.shipment);
+                    if (!shipment) continue;
+
+                    const vessel = await VesselTracking.findById(shipment.tracking_id);
+                    if (!vessel) continue;
+
+                    formattedIncident.affected_shipments.push({
+                        vessel_name: vessel.vessel_name,
+                        bill_of_lading: shipment.shipment_id,
+                        origin_port: shipment.POL,
+                        destination_port: shipment.POD,
+                        impact_score: incident.severity,
+                        total_delay: `${await this.calculateTotalDelay(shipment._id)} days`,
+                        current_coordinates: {
+                            latitude: vessel.lat_lon[0],
+                            longitude: vessel.lat_lon[1]
+                        },
+                        expected_time_to_reach: vessel.expected_arrival,
+                        incident: incident.source_news.summary
+                    });
+                }
+
+                resultMap.set(incident._id.toString(), formattedIncident);
+            }
 
             return { "incidents": Array.from(resultMap.values()) };
-            
         } catch (error) {
             console.error('Error in getIncidents:', error);
             throw error;
