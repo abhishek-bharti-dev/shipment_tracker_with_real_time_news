@@ -220,7 +220,7 @@ class IncidentService {
                         title: incident.source_news.title,
                         url: incident.source_news.url,
                         image: incident.source_news.image,
-                        summary: incident.source_news.summary
+                        summary: incident.source_news.news_details
                     }],
                     affected_area: [],
                     affected_shipments: [],
