@@ -15,7 +15,27 @@ const getLocationName = async (lat, lon) => {
         return 'Location not found';
     }
 };
+const calculateTotalDelay = async (shipmentId) => {
+    try {
+        const delays = await Delay.find({ shipment: shipmentId });
+        let totalDelay = 0;
 
+        for (const delay of delays) {
+            if (delay.location_type === 'port') {
+                // Sum up delay days from all affected ports
+                totalDelay += delay.affected_ports.reduce((sum, port) => sum + port.delay_days, 0);
+            } else {
+                // Sum up delay days from all sea delays
+                totalDelay += delay.sea_delays.reduce((sum, sea) => sum + sea.delay_days, 0);
+            }
+        }
+
+        return totalDelay;
+    } catch (error) {
+        console.error('Error in calculateTotalDelay:', error);
+        throw error;
+    }
+}
 const getMapDataService = async (email) => {
     try {
         console.log('Starting map data processing for email:', email);
@@ -33,6 +53,7 @@ const getMapDataService = async (email) => {
                 select: 'status vessel_name lat_lon',
             })
             .lean();
+        // console.log(shipments);
         console.log('Found shipments:', shipments.length);
 
         // 3. Get delays for these shipments
@@ -92,14 +113,19 @@ const getMapDataService = async (email) => {
                         // Get shipment details
                         const shipment = shipments.find(s => s._id.toString() === delay.shipment.toString());
                         const vesselTracking = shipment?.tracking_id;
+                        const total_delay = await calculateTotalDelay(shipment._id);
+                        console.log(shipment);
+                        // console.log(vesselTracking);
 
-                        locationMap.get(locationKey).affectedShipments.push({
-                            vessel: vesselTracking?.vessel_name || 'Unknown Vessel',
-                            originPort: shipment?.origin_port || 'Unknown',
-                            destinationPort: shipment?.destination_port || 'Unknown',
-                            impact: incident.severity,
-                            delay: `${delay.delay_days || 0} Days`
-                        });
+                        if (vesselTracking?.vessel_name && vesselTracking.vessel_name !== 'Unknown Vessel') {
+                            locationMap.get(locationKey).affectedShipments.push({
+                                vessel: vesselTracking.vessel_name,
+                                originPort: shipment?.POL || 'Unknown',
+                                destinationPort: shipment?.POD || 'Unknown',
+                                impact: incident.severity,
+                                delay: `${total_delay || 0} Days`
+                            });
+                        }
                     }
                 }
             } else {
@@ -121,14 +147,17 @@ const getMapDataService = async (email) => {
                         // Get shipment details
                         const shipment = shipments.find(s => s._id.toString() === delay.shipment.toString());
                         const vesselTracking = shipment?.tracking_id;
+                        const total_delay = await calculateTotalDelay(shipment._id);
 
-                        locationMap.get(locationKey).affectedShipments.push({
-                            vessel: vesselTracking?.vessel_name || 'Unknown Vessel',
-                            originPort: shipment?.origin_port || 'Unknown',
-                            destinationPort: shipment?.destination_port || 'Unknown',
-                            impact: incident.severity,
-                            delay: `${delay.delay_days || 0} Days`
-                        });
+                        if (vesselTracking?.vessel_name && vesselTracking.vessel_name !== 'Unknown Vessel') {
+                            locationMap.get(locationKey).affectedShipments.push({
+                                vessel: vesselTracking.vessel_name,
+                                originPort: shipment?.POL || 'Unknown',
+                                destinationPort: shipment?.POD || 'Unknown',
+                                impact: incident.severity,
+                                delay: `${total_delay || 0} Days`
+                            });
+                        }
                     }
                 }
             }
@@ -138,8 +167,8 @@ const getMapDataService = async (email) => {
         const result = Array.from(locationMap.values());
 
         // Log the result
-        console.log('\nFinal Map Data:');
-        console.log(JSON.stringify(result, null, 2));
+        // console.log('\nFinal Map Data:');
+        // console.log(JSON.stringify(result, null, 2));
 
         return result;
     } catch (error) {
