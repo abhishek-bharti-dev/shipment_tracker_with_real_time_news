@@ -3,6 +3,8 @@ const Delay = require('../models/Delay');
 const Incident = require('../models/Incident');
 const User = require('../models/User');
 const Shipment = require('../models/Shipment');
+const Port = require('../models/Port');
+const News = require('../models/News');
 
 class VesselTrackingService {
     async getAllVesselsWithImpactAndDelay(userEmail) {
@@ -33,45 +35,86 @@ class VesselTrackingService {
 
                 // Get delay information for this shipment
                 const delay = await Delay.findOne({ shipment: shipment._id });
-                console.log("delay: ", delay);
+                // console.log("delay: ", delay);
                 
                 let totalDelayDays = 0;
                 let impactScore = 0;
+                let affectedAt = 'No Delay';
+                let shipmentIncidentType = 'No Incident';
+                let curCoordinates = { latitude: '0', longitude: '0' };
 
                 if (delay) {
-                    console.log(" let's fix it")
-                    console.log("delay: ", delay);
                     if (delay.location_type === 'port') {
                         // Sum up port delays
                         totalDelayDays = delay.affected_ports.reduce((sum, port) => sum + port.delay_days, 0);
                         
+                        // Get port details for affected ports
+                        const portIds = delay.affected_ports.map(port => port.port);
+
+                        const ports = await Port.find({ _id: { $in: portIds } });
+                        console.log("ports: ", ports);
+                        
+                        if (ports.length > 0) {
+                            affectedAt = ports.map(port => port.port_name).join(', ');
+                            // Use the first port's coordinates
+                            curCoordinates = {
+                                latitude: vessel.lat_lon[0],
+                                longitude: vessel.lat_lon[1]
+                            };
+                        }
+
                         // Get incident IDs from affected ports
                         const incidentIds = delay.affected_ports.map(port => port.incident);
                         
-                        // Fetch incidents directly using their IDs
+                        // Fetch incidents and their related news
                         const relevantIncidents = await Incident.find({
                             _id: { $in: incidentIds }
-                        });
-                        
+                        }).populate('source_news');
+
                         if (relevantIncidents.length > 0) {
                             impactScore = relevantIncidents.reduce((sum, incident) => sum + incident.severity, 0) / relevantIncidents.length;
+                            shipmentIncidentType = relevantIncidents.map(incident => 
+                                incident.source_news ? incident.source_news.summary : 'No Summary'
+                            ).join(', ');
                         }
                     } else if (delay.location_type === 'sea') {
                         // Sum up sea delays
                         totalDelayDays = delay.sea_delays.reduce((sum, delay) => sum + delay.delay_days, 0);
                         
-                        // For sea delays, we might want to consider different impact calculation
-                        // This is a simplified version - adjust as needed
-                        impactScore = totalDelayDays > 6 ? 5 : 0;
+                        // Get incident details for sea delays
+                        const incidentIds = delay.sea_delays.map(delay => delay.incident);
+                        const relevantIncidents = await Incident.find({
+                            _id: { $in: incidentIds }
+                        }).populate('source_news');
+
+                        if (relevantIncidents.length > 0) {
+                            impactScore = totalDelayDays > 6 ? 5 : 0;
+                            affectedAt = relevantIncidents.map(incident => 
+                                incident.source_news ? incident.source_news.news_location : 'Unknown Location'
+                            ).join(', ');
+                            shipmentIncidentType = relevantIncidents.map(incident => 
+                                incident.source_news ? incident.source_news.summary : 'No Summary'
+                            ).join(', ');
+                            // Use the first incident's location coordinates
+                            if (relevantIncidents[0].source_news) {
+                                curCoordinates = {
+                                    latitude: vessel.lat_lon[0],
+                                    longitude: vessel.lat_lon[1]
+                                };
+                            }
+                        }
                     }
                 }
 
                 result.push({
                     vessel: vessel.vessel_name,
-                    originPort: shipment.POL, // Using POL from shipment
-                    destinationPort: shipment.POD, // Using POD from shipment
+                    originPort: shipment.POL,
+                    destinationPort: shipment.POD,
                     impact: Number(impactScore.toFixed(2)),
                     delay: `${totalDelayDays} ${totalDelayDays === 1 ? 'Day' : 'Days'}`,
+                    affectedAt,
+                    shipmentIncidentType,
+                    curCoordinates
                 });
             }
 
