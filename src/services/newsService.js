@@ -7,7 +7,7 @@ const Incident = require('../models/Incident');
 
 const getUserAffectedNewsFormatted = async (userId) => {
   try {
-    console.log(`Fetching affected news for user ID: ${userId}`);
+    // console.log(`Fetching affected news for user ID: ${userId}`);
 
     // Step 1: Get User
     const user = await User.findById(userId);
@@ -32,7 +32,7 @@ const getUserAffectedNewsFormatted = async (userId) => {
         { path: 'affected_ports.port', model: 'Port' }
       ]);
     
-    console.log(`Found ${delays.length} delays for user's shipments`);
+    // console.log(`Found ${delays.length} delays for user's shipments`);
 
     // Step 4: Extract all related incident IDs from delays
     const incidentIdSet = new Set();
@@ -49,7 +49,7 @@ const getUserAffectedNewsFormatted = async (userId) => {
       }
     }
 
-    console.log(`Found ${incidentIdSet.size} unique incidents affecting user's shipments`);
+    // console.log(`Found ${incidentIdSet.size} unique incidents affecting user's shipments`);
 
     if (incidentIdSet.size === 0) {
       return [];
@@ -59,15 +59,16 @@ const getUserAffectedNewsFormatted = async (userId) => {
     const incidents = await Incident.find({ _id: { $in: Array.from(incidentIdSet) } })
       .populate({
         path: 'source_news',
-        select: 'title summary image news_details'
+        select: 'title summary image news_details news_location'
       })
       .sort({ createdAt: -1 });
 
-    console.log(`Retrieved ${incidents.length} incidents with news`);
+    // console.log(`Retrieved ${incidents.length} incidents with news`);
 
     // Step 6: Format news response according to the new structure
     const formattedNews = incidents.map(incident => {
       const news = incident.source_news;
+      console.log("news: ", news);
       if (!news) return null;
 
       // Get affected ports and incident type
@@ -90,15 +91,19 @@ const getUserAffectedNewsFormatted = async (userId) => {
         }
 
         // Check sea delays
+        // console.log("delay: ", delay);
         const seaDelays = delay.sea_delays?.filter(s => 
           s.incident?._id.toString() === incident._id.toString()
-        ) || [];
+        ) || [];  
 
+        
         if (seaDelays.length > 0) {
+          // console.log("seaDelays: ", seaDelays);
           incidentType = 'Sea';
-          // For sea incidents, get the location from the incident
-          if (incident.location) {
-            affectedPorts.add(incident.location);
+          // For sea incidents, get the location from the source news
+          // console.log("news: ", news);
+          if (news.news_location) {
+            affectedPorts.add(news.news_location);
           }
         }
       }
