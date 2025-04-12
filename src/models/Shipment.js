@@ -7,8 +7,7 @@ const shipmentSchema = new mongoose.Schema({
     unique: true
   },
   client_id: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
+    type: String,
     required: true
   },
   tracking_id: {
