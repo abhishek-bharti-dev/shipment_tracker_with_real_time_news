@@ -70,222 +70,405 @@ class DelayService {
         }
     }
 
+    async handleDelay(incident, vessel, shipment, portCode  ) {
+        try {
+            // Find existing delay record for this shipment
+            let delayRecord = await Delay.findOne({ shipment: shipment._id });
+
+            // If no delay record exists, create a new one
+            if (!delayRecord) {
+                delayRecord = new Delay({
+                    shipment: shipment._id,
+                    location_type: 'port',
+                    affected_ports: []
+                });
+            }
+
+            // Find if this port already has a delay record
+            const existingPortDelay = delayRecord.affected_ports.find(
+                port => port.port_code === portCode
+            );
+
+            // Calculate the delay considering overlapping incidents
+            const delayDays = await this.calculateOverlappingDelay(incident, vessel, portCode);
+
+            if (existingPortDelay) {
+                // If port exists, update the delay and add the incident
+                existingPortDelay.delay_days = Math.max(existingPortDelay.delay_days, delayDays);
+                if (!existingPortDelay.incidents.includes(incident._id)) {
+                    existingPortDelay.incidents.push(incident._id);
+                }
+                existingPortDelay.updatedAt = new Date();
+            } else {
+                // If port doesn't exist, add a new port delay record
+                delayRecord.affected_ports.push({
+                    port_code: portCode,
+                    delay_days: delayDays,
+                    incidents: [incident._id],
+                    updatedAt: new Date()
+                });
+            }
+
+            // Save the updated delay record
+            await delayRecord.save();
+            
+            // Update the incident's delay_updated status
+            await Incident.findByIdAndUpdate(incident._id, { delay_updated: true });
+            
+            // Only increment total_shipments_affected if this is a new shipment being affected
+            const existingDelay = await Delay.findOne({ 
+                shipment: shipment._id,
+                'affected_ports.incidents': incident._id 
+            });
+            
+            if (!existingDelay) {
+                await Incident.findByIdAndUpdate(incident._id, { $inc: { total_shipments_affected: 1 } });
+            }
+
+            return delayRecord;
+        } catch (error) {
+            console.error('Error in handleDelay:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Calculate delay considering overlapping incidents
+     * @param {Object} incident - The current incident
+     * @param {Object} vessel - The vessel tracking document
+     * @returns {Number} Calculated delay in days
+     */
+    async calculateOverlappingDelay(incident, vessel, portCode) {
+        try {
+            // Get all incidents affecting this port
+            const allIncidents = await Incident.find({
+                'affected_ports.port_code': portCode,
+                delay_updated: true
+            }).sort({ createdAt: 1 });
+
+            // Create time intervals for all incidents
+            const intervals = allIncidents.map(inc => ({
+                start: inc.createdAt,
+                end: new Date(inc.createdAt.getTime() + inc.estimated_duration_days * 24 * 60 * 60 * 1000),
+                delay: inc.estimated_duration_days
+            }));
+
+            // Add the current incident
+            intervals.push({
+                start: incident.createdAt,
+                end: new Date(incident.createdAt.getTime() + incident.estimated_duration_days * 24 * 60 * 60 * 1000),
+                delay: incident.estimated_duration_days
+            });
+
+            // Sort intervals by start time
+            intervals.sort((a, b) => a.start - b.start);
+
+            // Merge overlapping intervals
+            const mergedIntervals = [];
+            let currentInterval = intervals[0];
+
+            for (let i = 1; i < intervals.length; i++) {
+                if (intervals[i].start <= currentInterval.end) {
+                    // Overlapping intervals, merge them
+                    currentInterval.end = new Date(Math.max(currentInterval.end.getTime(), intervals[i].end.getTime()));
+                    currentInterval.delay = Math.max(currentInterval.delay, intervals[i].delay);
+                } else {
+                    mergedIntervals.push(currentInterval);
+                    currentInterval = intervals[i];
+                }
+            }
+            mergedIntervals.push(currentInterval);
+
+            // Calculate total delay
+            const totalDelay = mergedIntervals.reduce((sum, interval) => {
+                const days = Math.ceil((interval.end - interval.start) / (1000 * 60 * 60 * 24));
+                return sum + Math.max(days, interval.delay);
+            }, 0);
+
+            return totalDelay;
+        } catch (error) {
+            console.error('Error in calculateOverlappingDelay:', error);
+            throw error;
+        }
+    }
+
+    async processUnupdatedDelayPort() {
+        try {
+            let vessels=[]
+            const incidents = await Incident.find({ delay_updated: false })
+                .populate('source_news')
+                .populate('affected_ports');
+            // filter those incident where location_type is port
+            const portIncidents = incidents.filter(incident => incident.location_type === 'port');
+            console.log(portIncidents.length);
+            // console.log(portIncidents);
+            // get all the port codes from the portIncidents
+            const portCodes = portIncidents.map(incident => incident.affected_ports.map(port => port.port_code));
+            console.log(portCodes);
+
+            // get all who are in transit
+            const vesselsInTransit = await VesselTracking.find({ status: 'intransit' });
+            console.log(vesselsInTransit.length);
+            console.log(vesselsInTransit);
+            //loop over incidents and check if the port code is in the vesselsInTransit also it it present it should not have actual_time_of_arrival
+            console.log('\n=== Starting Port-Vessel Matching Analysis ===');
+            console.log(`Total Port Incidents: ${portIncidents.length}`);
+            console.log(`Total Vessels in Transit: ${vesselsInTransit.length}\n`);
+
+            for (const incident of portIncidents) {
+                for (const port of incident.affected_ports) {
+                    let matchFound = false;
+                    for (const vessel of vesselsInTransit) {
+                        const matchingEvent = vessel.events.find(event => event.port_code === port.port_code);
+                        //check for that port it should not have actual_time_of_arrival
+                        const portEvent = vessel.events.find(event => event.port_code === port.port_code);
+                        
+                        if (portEvent && !portEvent.actual_time_of_arrival) {
+                            matchFound = true;
+                            console.log("incident_id", incident._id);
+                            console.log("vessel_id", vessel._id);
+                            const shipment = await Shipment.findOne({ tracking_id: vessel._id });
+                            console.log("shipment_id", shipment._id);
+                            console.log("port_code", port.port_code);
+                            console.log("delay_days", incident.estimated_duration_days);
+                                                       
+                            if (!matchingEvent.actual_time_of_arrival) {
+                                await this.handleDelay(incident, vessel, shipment, port.port_code);
+                                vessels.push(vessel);
+                            }
+                        }
+                    }
+                    
+                }
+            }
+            
+            console.log('\n=== Final Results ===');
+            console.log(`Total Vessels Added: ${vessels.length}`);
+            console.log('Vessel IDs:', vessels.map(v => v._id));
+            console.log('================================\n');
+            return vessels;
+        } catch (error) {
+            console.error('Error fetching unupdated delay incidents:', error);
+            throw error;
+        }
+    }
+
     /**
      * Process unupdated delay incidents
      * @returns {Promise<Object>} Processing results
      */
-    async processUnupdatedDelayIncidents() {
-        try {
-            // Get all incidents where delay_updated is false
-            const unupdatedIncidents = await Incident.find({ delay_updated: false })
-                .populate('source_news')
-                .populate('affected_ports');
+    // async processUnupdatedDelayIncidents() {
+    //     try {
+    //         // Get all incidents where delay_updated is false
+    //         const unupdatedIncidents = await Incident.find({ delay_updated: false })
+    //             .populate('source_news')
+    //             .populate('affected_ports');
 
-            const results = {
-                processed: 0,
-                skipped: 0,
-                errors: 0,
-                details: [],
-                delayNotifications: [] // New array to store delay notifications
-            };
+    //         const results = {
+    //             processed: 0,
+    //             skipped: 0,
+    //             errors: 0,
+    //             details: [],
+    //             delayNotifications: [] // New array to store delay notifications
+    //         };
 
-            // Create a map to store notifications by user and shipment
-            const notificationMap = new Map();
+    //         // Create a map to store notifications by user and shipment
+    //         const notificationMap = new Map();
 
-            for (const incident of unupdatedIncidents) {
-                try {
-                    if (incident.location_type === 'sea') {
-                        // Find vessels that are in transit
-                        const vesselsInTransit = await VesselTracking.find({
-                            status: 'intransit'
-                        });
+    //         for (const incident of unupdatedIncidents) {
+    //             try {
+    //                 if (incident.location_type === 'sea') {
+    //                     // Find vessels that are in transit
+    //                     const vesselsInTransit = await VesselTracking.find({
+    //                         status: 'intransit'
+    //                     });
 
-                        for (const vessel of vesselsInTransit) {
-                            // Get shipment ID from Shipment model using tracking ID
-                            const shipment = await Shipment.findOne({ tracking_id: vessel._id }).populate('client_id');
-                            if (!shipment) {
-                                console.log(`No shipment found for vessel tracking ID: ${vessel._id}`);
-                                continue;
-                            }
+    //                     for (const vessel of vesselsInTransit) {
+    //                         // Get shipment ID from Shipment model using tracking ID
+    //                         const shipment = await Shipment.findOne({ tracking_id: vessel._id }).populate('client_id');
+    //                         if (!shipment) {
+    //                             console.log(`No shipment found for vessel tracking ID: ${vessel._id}`);
+    //                             continue;
+    //                         }
 
-                            // Calculate distance between vessel and incident location
-                            const distance = this.calculateDistance(
-                                vessel.lat_lon[0],
-                                vessel.lat_lon[1],
-                                incident.lat_lon[0],
-                                incident.lat_lon[1]
-                            );
+    //                         // Calculate distance between vessel and incident location
+    //                         const distance = this.calculateDistance(
+    //                             vessel.lat_lon[0],
+    //                             vessel.lat_lon[1],
+    //                             incident.lat_lon[0],
+    //                             incident.lat_lon[1]
+    //                         );
 
-                            // If vessel is within 15km of incident
-                            if (distance <= 15) {
-                                const delay = await this.calculateDelay(incident, vessel);
-                                if (delay > 0) {
-                                    // Create or update delay record
-                                    const updatedDelay = await Delay.findOneAndUpdate(
-                                        {
-                                            shipment: shipment._id,
-                                            location_type: 'sea'
-                                        },
-                                        {
-                                            $push: {
-                                                sea_delays: {
-                                                    incident: incident._id,
-                                                    delay_days: delay
-                                                }
-                                            }
-                                        },
-                                        { upsert: true, new: true }
-                                    );
+    //                         // If vessel is within 15km of incident
+    //                         if (distance <= 15) {
+    //                             const delay = await this.calculateDelay(incident, vessel);
+    //                             if (delay > 0) {
+    //                                 // Create or update delay record
+    //                                 const updatedDelay = await Delay.findOneAndUpdate(
+    //                                     {
+    //                                         shipment: shipment._id,
+    //                                         location_type: 'sea'
+    //                                     },
+    //                                     {
+    //                                         $push: {
+    //                                             sea_delays: {
+    //                                                 incident: incident._id,
+    //                                                 delay_days: delay
+    //                                             }
+    //                                         }
+    //                                     },
+    //                                     { upsert: true, new: true }
+    //                                 );
                                     
-                                    if (updatedDelay) {
-                                        console.log("this is from delay service");
-                                        console.log(shipment);
-                                        console.log(shipment.client_id.name);
-                                        console.log(shipment.client_id.email);
-                                        // console.log(shipment.client_id);
-                                        const key = `${shipment.client_id._id}-${shipment._id}`;
-                                        console.log(key);
-                                        if (!notificationMap.has(key)) {
-                                            notificationMap.set(key, {
-                                                userName: shipment.client_id.name,
-                                                userEmail: shipment.client_id.email,
-                                                shipmentId: shipment._id,
-                                                delayType: 'sea',
-                                                seaIssues: [],
-                                                affectedPorts: [],
-                                                totalDelay: 0
-                                            });
-                                        }
-                                        const notification = notificationMap.get(key);
-                                        notification.seaIssues.push({
-                                            incidentId: incident._id,
-                                            delayDays: delay,
-                                            reason: incident.source_news.title,
-                                            startDate: incident.createdAt
-                                        });
-                                        notification.totalDelay += delay;
-                                    }
-                                }
-                            }
-                        }
+    //                                 if (updatedDelay) {
+    //                                     console.log("this is from delay service");
+    //                                     console.log(shipment);
+    //                                     console.log(shipment.client_id.name);
+    //                                     console.log(shipment.client_id.email);
+    //                                     // console.log(shipment.client_id);
+    //                                     const key = `${shipment.client_id._id}-${shipment._id}`;
+    //                                     console.log(key);
+    //                                     if (!notificationMap.has(key)) {
+    //                                         notificationMap.set(key, {
+    //                                             userName: shipment.client_id.name,
+    //                                             userEmail: shipment.client_id.email,
+    //                                             shipmentId: shipment._id,
+    //                                             delayType: 'sea',
+    //                                             seaIssues: [],
+    //                                             affectedPorts: [],
+    //                                             totalDelay: 0
+    //                                         });
+    //                                     }
+    //                                     const notification = notificationMap.get(key);
+    //                                     notification.seaIssues.push({
+    //                                         incidentId: incident._id,
+    //                                         delayDays: delay,
+    //                                         reason: incident.source_news.title,
+    //                                         startDate: incident.createdAt
+    //                                     });
+    //                                     notification.totalDelay += delay;
+    //                                 }
+    //                             }
+    //                         }
+    //                     }
 
-                        // Mark incident as processed
-                        await Incident.findByIdAndUpdate(incident._id, { delay_updated: true });
+    //                     // Mark incident as processed
+    //                     await Incident.findByIdAndUpdate(incident._id, { delay_updated: true });
 
-                        results.details.push({
-                            incidentId: incident._id,
-                            type: 'sea',
-                            status: 'processed',
-                            message: 'Successfully processed sea incident'
-                        });
-                        results.processed++;
-                        continue;
-                    }
+    //                     results.details.push({
+    //                         incidentId: incident._id,
+    //                         type: 'sea',
+    //                         status: 'processed',
+    //                         message: 'Successfully processed sea incident'
+    //                     });
+    //                     results.processed++;
+    //                     continue;
+    //                 }
 
-                    // Process port incidents
-                    const affectedPorts = incident.affected_ports;
-                    for (const port of affectedPorts) {
-                        // Find vessels that have this port in their events but no actual arrival time
-                        const vessels = await VesselTracking.find({
-                            'events': {
-                                $elemMatch: {
-                                    'port_code': port.port_code,
-                                    'actual_time_of_arrival': { $exists: false }
-                                }
-                            }
-                        });
+    //                 // Process port incidents
+    //                 const affectedPorts = incident.affected_ports;
+    //                 for (const port of affectedPorts) {
+    //                     // Find vessels that have this port in their events but no actual arrival time
+    //                     const vessels = await VesselTracking.find({
+    //                         'events': {
+    //                             $elemMatch: {
+    //                                 'port_code': port.port_code,
+    //                                 'actual_time_of_arrival': { $exists: false }
+    //                             }
+    //                         }
+    //                     });
 
-                        for (const vessel of vessels) {
-                            // Get shipment and user information
-                            const shipment = await Shipment.findOne({ tracking_id: vessel._id })
-                                .populate('client_id');
+    //                     for (const vessel of vessels) {
+    //                         // Get shipment and user information
+    //                         const shipment = await Shipment.findOne({ tracking_id: vessel._id })
+    //                             .populate('client_id');
                             
-                            if (!shipment) {
-                                console.log(`No shipment found for vessel tracking ID: ${vessel._id}`);
-                                continue;
-                            }
+    //                         if (!shipment) {
+    //                             console.log(`No shipment found for vessel tracking ID: ${vessel._id}`);
+    //                             continue;
+    //                         }
 
-                            const delay = await this.calculateDelay(incident, vessel);
-                            if (delay > 0) {
-                                // Create or update delay record
-                                const updatedDelay = await Delay.findOneAndUpdate(
-                                    {
-                                        shipment: shipment._id,
-                                        location_type: 'port'
-                                    },
-                                    {
-                                        $push: {
-                                            affected_ports: {
-                                                port: port._id,
-                                                incident: incident._id,
-                                                delay_days: delay
-                                            }
-                                        }
-                                    },
-                                    { upsert: true, new: true }
-                                );
-                                console.log("updatedDelay", updatedDelay);
+    //                         const delay = await this.calculateDelay(incident, vessel);
+    //                         if (delay > 0) {
+    //                             // Create or update delay record
+    //                             const updatedDelay = await Delay.findOneAndUpdate(
+    //                                 {
+    //                                     shipment: shipment._id,
+    //                                     location_type: 'port'
+    //                                 },
+    //                                 {
+    //                                     $push: {
+    //                                         affected_ports: {
+    //                                             port: port._id,
+    //                                             incident: incident._id,
+    //                                             delay_days: delay
+    //                                         }
+    //                                     }
+    //                                 },
+    //                                 { upsert: true, new: true }
+    //                             );
+    //                             console.log("updatedDelay", updatedDelay);
                                 
-                                if (updatedDelay) {
-                                    const key = `${shipment.client_id._id}-${shipment._id}`;
-                                    if (!notificationMap.has(key)) {
-                                        notificationMap.set(key, {
-                                            userName: shipment.client_id.name,
-                                            userEmail: shipment.client_id.email,
-                                            shipmentId: shipment._id,
-                                            delayType: 'port',
-                                            seaIssues: [],
-                                            affectedPorts: [],
-                                            totalDelay: 0
-                                        });
-                                    }
-                                    const notification = notificationMap.get(key);
-                                    notification.affectedPorts.push({
-                                        portCode: port.port_code,
-                                        portName: port.port_name,
-                                        delayDays: delay,
-                                        reason: incident.source_news.title,
-                                        startDate: incident.createdAt
-                                    });
-                                    notification.totalDelay += delay;
-                                }
-                            }
-                        }
-                    }
+    //                             if (updatedDelay) {
+    //                                 const key = `${shipment.client_id._id}-${shipment._id}`;
+    //                                 if (!notificationMap.has(key)) {
+    //                                     notificationMap.set(key, {
+    //                                         userName: shipment.client_id.name,
+    //                                         userEmail: shipment.client_id.email,
+    //                                         shipmentId: shipment._id,
+    //                                         delayType: 'port',
+    //                                         seaIssues: [],
+    //                                         affectedPorts: [],
+    //                                         totalDelay: 0
+    //                                     });
+    //                                 }
+    //                                 const notification = notificationMap.get(key);
+    //                                 notification.affectedPorts.push({
+    //                                     portCode: port.port_code,
+    //                                     portName: port.port_name,
+    //                                     delayDays: delay,
+    //                                     reason: incident.source_news.title,
+    //                                     startDate: incident.createdAt
+    //                                 });
+    //                                 notification.totalDelay += delay;
+    //                             }
+    //                         }
+    //                     }
+    //                 }
 
-                    // Mark incident as processed
-                    await Incident.findByIdAndUpdate(incident._id, { delay_updated: true });
+    //                 // Mark incident as processed
+    //                 await Incident.findByIdAndUpdate(incident._id, { delay_updated: true });
                     
-                    results.details.push({
-                        incidentId: incident._id,
-                        type: 'port',
-                        status: 'processed',
-                        message: 'Successfully processed port incident'
-                    });
-                    results.processed++;
-                } catch (error) {
-                    console.error(`Error processing incident ${incident._id}:`, error);
-                    results.details.push({
-                        incidentId: incident._id,
-                        type: incident.location_type,
-                        status: 'error',
-                        message: error.message
-                    });
-                    results.errors++;
-                }
-            }
+    //                 results.details.push({
+    //                     incidentId: incident._id,
+    //                     type: 'port',
+    //                     status: 'processed',
+    //                     message: 'Successfully processed port incident'
+    //                 });
+    //                 results.processed++;
+    //             } catch (error) {
+    //                 console.error(`Error processing incident ${incident._id}:`, error);
+    //                 results.details.push({
+    //                     incidentId: incident._id,
+    //                     type: incident.location_type,
+    //                     status: 'error',
+    //                     message: error.message
+    //                 });
+    //                 results.errors++;
+    //             }
+    //         }
 
-            // Convert map to array and add to results
-            results.delayNotifications = Array.from(notificationMap.values());
-            notificationHandler.processNotifications(results.delayNotifications);
+    //         // Convert map to array and add to results
+    //         results.delayNotifications = Array.from(notificationMap.values());
+    //         notificationHandler.processNotifications(results.delayNotifications);
 
-            // Return the results without sending emails
-            return results;
-        } catch (error) {
-            console.error('Error in processUnupdatedDelayIncidents:', error);
-            throw error;
-        }
-    }
+    //         // Return the results without sending emails
+    //         return results;
+    //     } catch (error) {
+    //         console.error('Error in processUnupdatedDelayIncidents:', error);
+    //         throw error;
+    //     }
+    // }
 
     /**
      * Calculate delay in days for a vessel based on incident
