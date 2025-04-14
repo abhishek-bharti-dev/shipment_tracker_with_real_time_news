@@ -12,84 +12,89 @@ class ShipmentStatusService {
         return 'NOT_AFFECTED';
     }
 
-    async getShipmentStatistics(email) {
+    async getShipmentStatistics(user_id) {
         try {
-            const user = await User.findOne({ email }).select('_id').lean();
-            if (!user) throw new Error('User not found');
-
-            const shipments = await Shipment.find({ client_id: user._id })
-                .populate({
-                    path: 'tracking_id',
-                    match: { status: "intransit" },
-                    select: 'status',
-                })
-                .lean();
-
-            // Filter only shipments with tracking_id populated
-            const activeShipments = shipments.filter(s => s.tracking_id);
+            console.log("user_id", user_id);
+            const shipments = await Shipment.find({ client_id: user_id }).populate('tracking_id');
+            const shipmentInTransit = [];
+            for(const shipment of shipments){
+                // console.log("shipment", shipment)
+                if(shipment.tracking_id.status === 'intransit'){
+                    shipmentInTransit.push(shipment);
+                }
+            }
+            // console.log("shipments", shipmentInTransit);
+            console.log("shipments.length", shipmentInTransit.length);
+            // return shipmentInTransit;
 
             // Initialize stats
             const stats = {
-                shipmentInTransit: activeShipments.length,
+                shipmentInTransit: shipmentInTransit.length,
                 shipmentNotAffected: 0,
                 shipmentUnderCaution: 0,
                 shipmentUnderDanger: 0
             };
 
-            const shipmentIds = activeShipments.map(s => s._id);
+            const shipmentIds = shipmentInTransit.map(s => s._id);
+            // console.log("shipmentIds", shipmentIds);
+            // return shipmentIds;
 
             // Get all delays in one query
-            const delays = await Delay.find({ shipment: { $in: shipmentIds } }).lean();
+            const delays = await Delay.find({ shipment: { $in: shipmentIds } });
+            // console.log("delays", delays);
+            // console.log("delays.length", delays.length);
+            stats.shipmentNotAffected = shipmentInTransit.length - delays.length;
 
-            // Map shipmentId -> delay
-            const delayMap = new Map();
-            delays.forEach(delay => delayMap.set(delay.shipment.toString(), delay));
-
-            // Collect all incident IDs
-            const incidentIdSet = new Set();
+            // Collect all incident IDs from affected ports and sea delays
+            const incidentIds = new Set();
             const shipmentToIncidents = new Map();
 
-            for (const shipment of activeShipments) {
-                const delay = delayMap.get(shipment._id.toString());
-
-                if (!delay) {
-                    stats.shipmentNotAffected++;
-                    continue;
+            for (const delay of delays) {
+                const incidentIdsForDelay = [];
+                
+                // Get incident IDs from affected ports
+                if (delay.affected_ports && delay.affected_ports.length > 0) {
+                    delay.affected_ports.forEach(port => {
+                        if (port.incidents && Array.isArray(port.incidents)) {
+                            incidentIdsForDelay.push(...port.incidents);
+                            port.incidents.forEach(id => incidentIds.add(id.toString()));
+                        }
+                    });
                 }
 
-                let incidentIds = [];
-                if (delay.location_type === 'port') {
-                    incidentIds = delay.affected_ports.map(p => p.incident);
-                } else if (delay.location_type === 'sea') {
-                    incidentIds = delay.sea_delays.map(s => s.incident);
+                // Get incident IDs from sea delays
+                if (delay.sea_delays && delay.sea_delays.length > 0) {
+                    // console.log("delay.sea_delays", delay.sea_delays);
+                    delay.sea_delays.forEach(seaDelay => {
+                        if (seaDelay.incidents && Array.isArray(seaDelay.incidents)) {
+                            // console.log("seaDelay", seaDelay.incidents);
+                            incidentIdsForDelay.push(...seaDelay.incidents);
+                            seaDelay.incidents.forEach(id => incidentIds.add(id.toString()));
+                        }
+                    });
                 }
-
-                incidentIds.forEach(id => incidentIdSet.add(id.toString()));
-                shipmentToIncidents.set(shipment._id.toString(), incidentIds);
+                shipmentToIncidents.set(delay.shipment.toString(), incidentIdsForDelay);
             }
 
+            console.log("incidentIds", incidentIds);
+            console.log("shipmentwithdelays", delays.length);
+
             // Fetch all incidents at once
-            const incidents = await Incident.find({ _id: { $in: Array.from(incidentIdSet) } }).lean();
+            const incidents = await Incident.find({ _id: { $in: Array.from(incidentIds) } }).lean();
             const incidentSeverityMap = new Map();
             incidents.forEach(inc => incidentSeverityMap.set(inc._id.toString(), inc.severity));
 
-            // Analyze incident severity per shipment
-            for (const shipment of activeShipments) {
-                const incidentIds = shipmentToIncidents.get(shipment._id.toString());
-                if (!incidentIds || incidentIds.length === 0) continue;
-
+            // Calculate average severity for each shipment and categorize
+            for (const [shipmentId, incidentIds] of shipmentToIncidents) {
                 const severities = incidentIds
                     .map(id => incidentSeverityMap.get(id.toString()))
                     .filter(sev => typeof sev === 'number');
 
-                if (severities.length === 0) {
-                    stats.shipmentNotAffected++;
-                    continue;
-                }
+                if (severities.length === 0) continue;
 
                 const avgSeverity = severities.reduce((sum, s) => sum + s, 0) / severities.length;
 
-                if (avgSeverity >= 7) {
+                if (avgSeverity > 7) {
                     stats.shipmentUnderDanger++;
                 } else {
                     stats.shipmentUnderCaution++;
