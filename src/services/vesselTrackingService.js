@@ -7,16 +7,16 @@ const Port = require('../models/Port');
 const News = require('../models/News');
 
 class VesselTrackingService {
-    async getAllVesselsWithImpactAndDelay(userEmail) {
+    async getAllVesselsWithImpactAndDelay(user_id) {
         try {
             // First get the user by email
-            const user = await User.findOne({ email: userEmail });
-            if (!user) {
-                throw new Error('User not found');
-            }
+            // const user = await User.findOne({ email: userEmail });
+            // if (!user) {
+            //     throw new Error('User not found');
+            // }
             
             // Get all the shipments associated with this user
-            const shipments = await Shipment.find({ client_id: user._id });
+            const shipments = await Shipment.find({ client_id: user_id });
             console.log("shipments: ", shipments.length);
 
             // Get all incidents for later use
@@ -42,6 +42,17 @@ class VesselTrackingService {
                 let affectedAt = 'No Delay';
                 let shipmentIncidentType = 'No Incident';
                 let curCoordinates = { latitude: '0', longitude: '0' };
+                let nextPort = null;
+                let eta = null;
+
+                // Get next port information from vessel events
+                if (vessel.events && vessel.events.length > 0) {
+                    const nextEvent = vessel.events.find(event => !event.actual_time_of_arrival);
+                    if (nextEvent) {
+                        nextPort = nextEvent.port_name;
+                        eta = nextEvent.expected_time_of_arrival;
+                    }
+                }
 
                 if (delay) {
                     if (delay.location_type === 'port') {
@@ -49,13 +60,14 @@ class VesselTrackingService {
                         totalDelayDays = delay.affected_ports.reduce((sum, port) => sum + port.delay_days, 0);
                         
                         // Get port details for affected ports
-                        const portIds = delay.affected_ports.map(port => port.port);
+                        const portIds = delay.affected_ports.map(port => port.port_code);
+                        console.log("portIds: ", portIds);
 
-                        const ports = await Port.find({ _id: { $in: portIds } });
+                        const ports = await Port.find({ port_code: { $in: portIds } });
                         console.log("ports: ", ports);
                         
                         if (ports.length > 0) {
-                            affectedAt = ports.map(port => port.port_name).join(', ');
+                            affectedAt = ports.map(port => port.port_code).join(', ');
                             // Use the first port's coordinates
                             curCoordinates = {
                                 latitude: vessel.lat_lon[0],
@@ -64,7 +76,7 @@ class VesselTrackingService {
                         }
 
                         // Get incident IDs from affected ports
-                        const incidentIds = delay.affected_ports.map(port => port.incident);
+                        const incidentIds = delay.affected_ports.flatMap(port => port.incidents);
                         
                         // Fetch incidents and their related news
                         const relevantIncidents = await Incident.find({
@@ -82,13 +94,13 @@ class VesselTrackingService {
                         totalDelayDays = delay.sea_delays.reduce((sum, delay) => sum + delay.delay_days, 0);
                         
                         // Get incident details for sea delays
-                        const incidentIds = delay.sea_delays.map(delay => delay.incident);
+                        const incidentIds = delay.sea_delays.flatMap(delay => delay.incidents);
                         const relevantIncidents = await Incident.find({
                             _id: { $in: incidentIds }
                         }).populate('source_news');
 
                         if (relevantIncidents.length > 0) {
-                            impactScore = totalDelayDays > 6 ? 5 : 0;
+                            impactScore = relevantIncidents.reduce((sum, incident) => sum + incident.severity, 0) / relevantIncidents.length;
                             affectedAt = relevantIncidents.map(incident => 
                                 incident.source_news ? incident.source_news.news_location : 'Unknown Location'
                             ).join(', ');
@@ -108,6 +120,7 @@ class VesselTrackingService {
 
                 result.push({
                     vessel: vessel.vessel_name,
+                    vesselCode: vessel.vessel_code,
                     originPort: shipment.POL,
                     destinationPort: shipment.POD,
                     impact: Number(impactScore.toFixed(2)),

@@ -6,8 +6,8 @@ class VesselTrackingController {
     async getAllVessels(req, res) {
         try {
             // Get user email from the authenticated user
-            const email = req.user.email;
-            const vesselData = await vesselTrackingService.getAllVesselsWithImpactAndDelay(email);
+            const user_id = req.user.id;
+            const vesselData = await vesselTrackingService.getAllVesselsWithImpactAndDelay(user_id);
             res.json({
                 success: true,
                 data: vesselData,
