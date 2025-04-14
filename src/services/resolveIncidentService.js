@@ -21,8 +21,8 @@ class ResolveIncidentService {
             // Find and delete delay entries associated with this incident
             const delayEntries = await Delay.find({
                 $or: [
-                    { 'affected_ports.incident': incident._id },
-                    { 'sea_delays.incident': incident._id }
+                    { 'affected_ports.incidents': incident._id },
+                    { 'sea_delays.incidents': incident._id }
                 ]
             });
 
