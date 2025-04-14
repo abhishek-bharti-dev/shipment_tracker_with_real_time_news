@@ -21,8 +21,8 @@ const createIncident = async (req, res) => {
 
 const getIncidents = async (req, res) => {
     try {
-        const email = req.user.email; // Get email from authenticated user
-        const incidents = await incidentService.getIncidents(email);
+        const id = req.user.id; // Get email from authenticated user
+        const incidents = await incidentService.getIncidents(id);
         res.json({
             success: true,
             data: incidents,
