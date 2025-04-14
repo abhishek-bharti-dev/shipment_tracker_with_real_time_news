@@ -2,8 +2,10 @@ const { getMapDataService } = require('../services/mapVisualizationService');
 
 const getMapData = async (req, res) => {
     try {
-        const email = req.user.email; // Get email from authenticated user
-        const mapData = await getMapDataService(email);
+        const user = req.user;
+        console.log(user);
+        const user_id = req.user.id; // Get email from authenticated user
+        const mapData = await getMapDataService(user_id);
         res.status(200).json({
             success: true,
             data: mapData,
