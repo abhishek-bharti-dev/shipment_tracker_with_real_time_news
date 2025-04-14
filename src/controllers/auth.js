@@ -8,46 +8,31 @@ const signup = async (req, res) => {
     try {
         const { email, password, name } = req.body;
 
-        // Check if user already exists
-        const existingUser = await User.findOne({ email });
-        if (existingUser) {
-            return res.status(400).json({
-                success: false,
-                data: null,
-                message: 'User already exists'
-            });
-        }
-
-        // Create new user
-        const user = new User({
+        // Make request to Xano API for signup
+        const response = await axios.post('https://x8ki-letl-twmt.n7.xano.io/api:539QLzhw/auth/signup', {
             email,
             password,
             name
         });
 
-        await user.save();
-
-        // Generate JWT token
-        const token = jwt.sign(
-            { userId: user._id },
-            process.env.JWT_SECRET,
-            { expiresIn: '24h' }
-        );
-
         res.status(201).json({
             success: true,
-            data: {
-                token,
-                user: {
-                    id: user._id,
-                    email: user.email,
-                    name: user.name
-                }
+            data:{
+                token: response.data.authToken,
+                user: response.data.user
             },
             message: 'User created successfully'
         });
     } catch (error) {
         console.error('Signup error:', error);
+        // Handle Xano API errors
+        if (error.response) {
+            return res.status(error.response.status).json({
+                success: false,
+                data: null,
+                message: error.response.data.message || 'Error creating user'
+            });
+        }
         res.status(500).json({
             success: false,
             data: null,
