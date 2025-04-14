@@ -35,14 +35,29 @@ class DelayService {
         try {
             const delays = await Delay.find({ shipment: shipmentId });
             let totalDelay = 0;
+            const processedIncidents = new Set(); // Track processed incident IDs
 
             for (const delay of delays) {
                 if (delay.location_type === 'port') {
-                    // Sum up delay days from all affected ports
-                    totalDelay += delay.affected_ports.reduce((sum, port) => sum + port.delay_days, 0);
+                    // Sum up delay days from all affected ports, considering unique incidents
+                    for (const port of delay.affected_ports) {
+                        for (const incidentId of port.incidents) {
+                            if (!processedIncidents.has(incidentId.toString())) {
+                                totalDelay += port.delay_days;
+                                processedIncidents.add(incidentId.toString());
+                            }
+                        }
+                    }
                 } else {
-                    // Sum up delay days from all sea delays
-                    totalDelay += delay.sea_delays.reduce((sum, sea) => sum + sea.delay_days, 0);
+                    // Sum up delay days from all sea delays, considering unique incidents
+                    for (const sea of delay.sea_delays) {
+                        for (const incidentId of sea.incidents) {
+                            if (!processedIncidents.has(incidentId.toString())) {
+                                totalDelay += sea.delay_days;
+                                processedIncidents.add(incidentId.toString());
+                            }
+                        }
+                    }
                 }
             }
 
