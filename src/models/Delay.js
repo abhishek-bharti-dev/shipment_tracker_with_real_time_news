@@ -1,26 +1,21 @@
 const mongoose = require('mongoose');
 
 const portDelaySchema = new mongoose.Schema({
-  port: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Port',
+  port_code: {
+    type: String,
     required: true
   },
   delay_days: {
     type: Number,
     required: true
   },
-  port_name: {
-    type: String,
-    required: true
-  },
-  port_code: {
-    type: String,
-    required: true
-  },
-  incident: {
+  incidents: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Incident',
+    required: true
+  }],
+  updatedAt: {
+    type: Date,
     required: true
   }
 });
@@ -34,11 +29,15 @@ const seaDelaySchema = new mongoose.Schema({
     type: Number,
     required: true
   },
-  incident: {
+  incidents: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Incident',
     required: true
-  }
+  }],
+  updatedAt: {
+    type: Date,
+    required: true
+  } 
 });
 
 const delaySchema = new mongoose.Schema({
