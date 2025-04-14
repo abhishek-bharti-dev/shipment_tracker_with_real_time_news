@@ -8,8 +8,9 @@ const { getUserAffectedNewsFormatted } = require('../services/newsService');
 
 exports.getUserAffectedNewsFormatted = async (req, res) => {
   try {
-    const userId = req.user.userId;
-    const formattedNews = await getUserAffectedNewsFormatted(userId);
+    const user_id = req.user.userId;
+
+    const formattedNews = await getUserAffectedNewsFormatted(user_id);
     
     res.status(200).json({ 
       success: true, 
