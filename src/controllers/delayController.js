@@ -7,7 +7,7 @@ const delayService = require('../services/delayService');
  */
 const processDelay = async (req, res) => {
     try {
-        const result = await delayService.processUnupdatedDelayPort();
+        const result = await delayService.processUnupdatedDelayIncidents();
         return res.json({
             success: true,
             data: result,

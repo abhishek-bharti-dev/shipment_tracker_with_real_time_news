@@ -70,7 +70,7 @@ class DelayService {
         }
     }
 
-    async handleDelay(incident, vessel, shipment, portCode  ) {
+    async handlePortDelay(incident, vessel, shipment, portCode) {
         try {
             // Find existing delay record for this shipment
             let delayRecord = await Delay.findOne({ shipment: shipment._id });
@@ -101,6 +101,7 @@ class DelayService {
                 existingPortDelay.updatedAt = new Date();
             } else {
                 // If port doesn't exist, add a new port delay record
+                console.log("incident_id", incident);
                 delayRecord.affected_ports.push({
                     port_code: portCode,
                     delay_days: delayDays,
@@ -112,22 +113,17 @@ class DelayService {
             // Save the updated delay record
             await delayRecord.save();
             
-            // Update the incident's delay_updated status
-            await Incident.findByIdAndUpdate(incident._id, { delay_updated: true });
             
-            // Only increment total_shipments_affected if this is a new shipment being affected
-            const existingDelay = await Delay.findOne({ 
-                shipment: shipment._id,
-                'affected_ports.incidents': incident._id 
-            });
+                // Increment total_shipments_affected for the incident
+                await Incident.findByIdAndUpdate(incident._id, { 
+                    $inc: { total_shipments_affected: 1 },
+                    delay_updated: true 
+                });
             
-            if (!existingDelay) {
-                await Incident.findByIdAndUpdate(incident._id, { $inc: { total_shipments_affected: 1 } });
-            }
 
             return delayRecord;
         } catch (error) {
-            console.error('Error in handleDelay:', error);
+            console.error('Error in handlePortDelay:', error);
             throw error;
         }
     }
@@ -140,6 +136,8 @@ class DelayService {
      */
     async calculateOverlappingDelay(incident, vessel, portCode) {
         try {
+            const today = new Date();
+            
             // Get all incidents affecting this port
             const allIncidents = await Incident.find({
                 'affected_ports.port_code': portCode,
@@ -147,16 +145,20 @@ class DelayService {
             }).sort({ createdAt: 1 });
 
             // Create time intervals for all incidents
-            const intervals = allIncidents.map(inc => ({
-                start: inc.createdAt,
-                end: new Date(inc.createdAt.getTime() + inc.estimated_duration_days * 24 * 60 * 60 * 1000),
-                delay: inc.estimated_duration_days
-            }));
+            const intervals = allIncidents.map(inc => {
+                const endDate = new Date(inc.createdAt.getTime() + inc.estimated_duration_days * 24 * 60 * 60 * 1000);
+                return {
+                    start: inc.createdAt,
+                    end: endDate > today ? today : endDate,
+                    delay: inc.estimated_duration_days
+                };
+            });
 
             // Add the current incident
+            const currentEndDate = new Date(incident.createdAt.getTime() + incident.estimated_duration_days * 24 * 60 * 60 * 1000);
             intervals.push({
                 start: incident.createdAt,
-                end: new Date(incident.createdAt.getTime() + incident.estimated_duration_days * 24 * 60 * 60 * 1000),
+                end: currentEndDate > today ? today : currentEndDate,
                 delay: incident.estimated_duration_days
             });
 
@@ -200,20 +202,20 @@ class DelayService {
                 .populate('affected_ports');
             // filter those incident where location_type is port
             const portIncidents = incidents.filter(incident => incident.location_type === 'port');
-            console.log(portIncidents.length);
+            // console.log(portIncidents.length);
             // console.log(portIncidents);
             // get all the port codes from the portIncidents
             const portCodes = portIncidents.map(incident => incident.affected_ports.map(port => port.port_code));
-            console.log(portCodes);
+            // console.log(portCodes);
 
             // get all who are in transit
             const vesselsInTransit = await VesselTracking.find({ status: 'intransit' });
-            console.log(vesselsInTransit.length);
-            console.log(vesselsInTransit);
+            // console.log(vesselsInTransit.length);
+            // console.log(vesselsInTransit);
             //loop over incidents and check if the port code is in the vesselsInTransit also it it present it should not have actual_time_of_arrival
-            console.log('\n=== Starting Port-Vessel Matching Analysis ===');
-            console.log(`Total Port Incidents: ${portIncidents.length}`);
-            console.log(`Total Vessels in Transit: ${vesselsInTransit.length}\n`);
+            // console.log('\n=== Starting Port-Vessel Matching Analysis ===');
+            // console.log(`Total Port Incidents: ${portIncidents.length}`);
+            // console.log(`Total Vessels in Transit: ${vesselsInTransit.length}\n`);
 
             for (const incident of portIncidents) {
                 for (const port of incident.affected_ports) {
@@ -228,12 +230,16 @@ class DelayService {
                             console.log("incident_id", incident._id);
                             console.log("vessel_id", vessel._id);
                             const shipment = await Shipment.findOne({ tracking_id: vessel._id });
+                            if (!shipment) {
+                                console.log(`No shipment found for vessel tracking ID: ${vessel._id}`);
+                                continue;
+                            }
                             console.log("shipment_id", shipment._id);
                             console.log("port_code", port.port_code);
                             console.log("delay_days", incident.estimated_duration_days);
                                                        
                             if (!matchingEvent.actual_time_of_arrival) {
-                                await this.handleDelay(incident, vessel, shipment, port.port_code);
+                                await this.handlePortDelay(incident, vessel, shipment, port.port_code);
                                 vessels.push(vessel);
                             }
                         }
@@ -242,7 +248,7 @@ class DelayService {
                 }
             }
             
-            console.log('\n=== Final Results ===');
+            console.log('\n=== Final Results for port incidents ===');
             console.log(`Total Vessels Added: ${vessels.length}`);
             console.log('Vessel IDs:', vessels.map(v => v._id));
             console.log('================================\n');
@@ -253,12 +259,124 @@ class DelayService {
         }
     }
 
+    async calculateSeaDelay(incident) {
+        try {
+            const incidentDate = new Date(incident.createdAt);
+            const estimatedEndDate = new Date(incidentDate.getTime() + incident.estimated_duration_days * 24 * 60 * 60 * 1000);
+            const today = new Date();
+            
+            // If the estimated end date is in the future, calculate remaining delay
+            if (estimatedEndDate > today) {
+                const remainingDelayDays = Math.ceil((estimatedEndDate - today) / (1000 * 60 * 60 * 24));
+                return remainingDelayDays;
+            }
+            
+            // If the estimated end date has passed, return 0 as there's no remaining delay
+            return 0;
+        } catch (error) {
+            console.error('Error in calculateSeaDelay:', error);
+            throw error;    
+        }
+    }
+
+    async handleSeaDelay(incident, vessel, shipment) {
+        try {
+            // console.log("incident_id", incident._id);
+            // console.log("vessel_id", vessel._id);
+            // console.log("shipment_id", shipment._id);
+            // return;
+            // Find existing delay record for this shipment
+            let delayRecord = await Delay.findOne({ shipment: shipment._id });
+
+            if (!delayRecord) {
+                delayRecord = new Delay({
+                    shipment: shipment._id,
+                    location_type: 'sea',
+                    sea_delays: []
+                });
+            }
+
+            // return ;
+
+            // Calculate the delay considering overlapping incidents
+            const delayDays = await this.calculateSeaDelay(incident, vessel);
+            // console.log("delayDays", delayDays);
+            if (delayRecord) {
+                // If port exists, update the delay and add the incident
+                // console.log("yea hai bhai sea wala incident");
+                // console.log(incident._id);
+                delayRecord.sea_delays.push({
+                    lat_lon: incident.lat_lon,
+                    incidents: [incident._id],
+                    delay_days: delayDays,
+                    updatedAt: new Date()
+                }); 
+                await delayRecord.save();
+                await Incident.findByIdAndUpdate(incident._id, { delay_updated: true });
+                await Incident.findByIdAndUpdate(incident._id, { $inc: { total_shipments_affected: 1 } });
+            }   
+        } catch (error) {
+            console.error('Error in handleSeaDelay:', error);
+            throw error;
+        }
+    }
+
+    async processUnupdatedDelaySea() {
+        try {
+            const incidents = await Incident.find({ delay_updated: false })
+                .populate('source_news')
+                .populate('affected_ports');
+            // filter those incident where location_type is sea
+            const seaIncidents = incidents.filter(incident => incident.location_type === 'sea');
+            // console.log("seaIncidents", seaIncidents);
+            // console.log(seaIncidents.length);
+            
+            // get all the vessels in transit
+            const vesselsInTransit = await VesselTracking.find({ status: 'intransit' });
+            // console.log(vesselsInTransit.length);
+            
+            // console.log('\n=== Starting Sea Incident-Vessel Distance Analysis ===');
+            // console.log(`Total Sea Incidents: ${seaIncidents.length}`);
+            // console.log(`Total Vessels in Transit: ${vesselsInTransit.length}\n`);
+            
+            for (const incident of seaIncidents) {
+                // console.log(`\nAnalyzing Incident ID: ${incident._id}`);
+                // console.log(`Incident Location (lat, lon): ${incident.lat_lon}`);
+                
+                for (const vessel of vesselsInTransit) {
+                    if (vessel.lat_lon && vessel.lat_lon.length === 2) {
+                        const distance = this.calculateDistance(
+                            incident.lat_lon[0],
+                            incident.lat_lon[1],
+                            vessel.lat_lon[0],
+                            vessel.lat_lon[1]
+                        );
+                        const shipment = await Shipment.findOne({ tracking_id: vessel._id });
+                        // console.log(`\nVessel ID: ${vessel._id}`);
+                        // console.log(`Vessel Location (lat, lon): ${vessel.lat_lon}`);
+                        // console.log(`Distance from Incident: ${distance.toFixed(2)} km`);
+                        if(distance <= 15){
+                            await this.handleSeaDelay(incident, vessel, shipment);
+                        }
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Error in processUnupdatedDelaySea:', error);
+            throw error;
+        }
+    }
+
+
     /**
      * Process unupdated delay incidents
      * @returns {Promise<Object>} Processing results
      */
-    // async processUnupdatedDelayIncidents() {
-    //     try {
+    async processUnupdatedDelayIncidents() {
+        try {
+            await this.processUnupdatedDelayPort();
+            await this.processUnupdatedDelaySea();
+        
     //         // Get all incidents where delay_updated is false
     //         const unupdatedIncidents = await Incident.find({ delay_updated: false })
     //             .populate('source_news')
@@ -464,11 +582,11 @@ class DelayService {
 
     //         // Return the results without sending emails
     //         return results;
-    //     } catch (error) {
-    //         console.error('Error in processUnupdatedDelayIncidents:', error);
-    //         throw error;
-    //     }
-    // }
+        } catch (error) {
+            console.error('Error in processUnupdatedDelayIncidents:', error);
+            throw error;
+        }
+    }
 
     /**
      * Calculate delay in days for a vessel based on incident
