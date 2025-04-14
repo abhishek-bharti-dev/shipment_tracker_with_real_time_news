@@ -1,38 +1,46 @@
 const User = require('../models/User');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const axios = require('axios');
 
 // Signup controller
 const signup = async (req, res) => {
     try {
         const { email, password, name } = req.body;
 
-        // Make request to Xano API for signup
-        const response = await axios.post('https://x8ki-letl-twmt.n7.xano.io/api:539QLzhw/auth/signup', {
+        // Check if user already exists
+        const existingUser = await User.findOne({ email });
+        if (existingUser) {
+            return res.status(400).json({
+                success: false,
+                data: null,
+                message: 'User already exists with this email'
+            });
+        }
+
+        // Create new user
+        const user = await User.create({
+            name,
             email,
-            password,
-            name
+            password
         });
+
+        // Generate JWT token
+        const token = jwt.sign(
+            { userId: user._id, email: user.email },
+            process.env.JWT_SECRET,
+            { expiresIn: '24h' }
+        );
 
         res.status(201).json({
             success: true,
-            data:{
-                token: response.data.authToken,
-                user: response.data.user
+            data: {
+                token,
+                user: user.getProfile()
             },
             message: 'User created successfully'
         });
     } catch (error) {
         console.error('Signup error:', error);
-        // Handle Xano API errors
-        if (error.response) {
-            return res.status(error.response.status).json({
-                success: false,
-                data: null,
-                message: error.response.data.message || 'Error creating user'
-            });
-        }
         res.status(500).json({
             success: false,
             data: null,
@@ -46,34 +54,47 @@ const login = async (req, res) => {
     try {
         const { email, password } = req.body;
 
-        // Make request to Xano API for login
-        const loginResponse = await axios.post('https://x8ki-letl-twmt.n7.xano.io/api:539QLzhw/auth/login', {
-            email,
-            password
-        });
+        // Find user by email
+        const user = await User.findOne({ email }).select('+password');
+        if (!user) {
+            return res.status(401).json({
+                success: false,
+                data: null,
+                message: 'Invalid credentials'
+            });
+        }
 
-        // Get the token from login response
-        const token = loginResponse.data.authToken;
+        // Check password
+        const isMatch = await user.comparePassword(password);
+        if (!isMatch) {
+            return res.status(401).json({
+                success: false,
+                data: null,
+                message: 'Invalid credentials'
+            });
+        }
 
-        // Return both login and user details
+        // Update last login
+        user.lastLogin = new Date();
+        await user.save();
+
+        // Generate JWT token
+        const token = jwt.sign(
+            { userId: user._id, email: user.email },
+            process.env.JWT_SECRET,
+            { expiresIn: '24h' }
+        );
+
         res.status(200).json({
             success: true,
             data: {
-                token: token,
-                user: loginResponse.data.user
+                token,
+                user: user.getProfile()
             },
             message: 'Login successful'
         });
     } catch (error) {
         console.error('Login error:', error);
-        // Handle Xano API errors
-        if (error.response) {
-            return res.status(error.response.status).json({
-                success: false,
-                data: null,
-                message: error.response.data.message || 'Invalid credentials'
-            });
-        }
         res.status(500).json({
             success: false,
             data: null,
