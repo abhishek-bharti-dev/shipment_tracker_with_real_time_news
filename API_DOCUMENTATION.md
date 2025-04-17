@@ -343,15 +343,16 @@ Retrieves a specific news item by its ID.
 ```
 
 ### Common Error Codes
-| Code | Description |
-|------|-------------|
-| 400 | Bad Request - Invalid parameters |
-| 401 | Unauthorized - Invalid or missing token |
-| 403 | Forbidden - Insufficient permissions |
-| 404 | Not Found - Resource not found |
-| 429 | Too Many Requests - Rate limit exceeded |
-| 500 | Internal Server Error - Server-side error |
-
+-----------------------------------------------------
+| Code | Description                                |
+|------|--------------------------------------------|
+| 400  | Bad Request - Invalid parameters           |
+| 401  | Unauthorized - Invalid or missing token    |
+| 403  | Forbidden - Insufficient permissions       |
+| 404  | Not Found - Resource not found             |
+| 429  | Too Many Requests - Rate limit exceeded    |
+| 500  | Internal Server Error - Server-side error  |
+-----------------------------------------------------
 ## Rate Limiting
 API requests are rate-limited to prevent abuse:
 
