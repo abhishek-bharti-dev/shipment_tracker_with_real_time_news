@@ -5,43 +5,53 @@ const crypto = require('crypto');
 const mongoose = require('mongoose');
 const imageExtractionService = require('./imageExtractionService');
 const geminiApi = require('./geminiApi');
+require('dotenv').config();
+
+// Connect to MongoDB
+mongoose.connect(process.env.DATABASE_URI3)
+  .then(() => console.log('Connected to MongoDB'))
+  .catch(err => {
+    console.error('MongoDB connection error:', err);
+    process.exit(1);
+  });
 
 // Create a hash of the news content to check for duplicates
 function generateNewsHash(newsData) {
     const contentToHash = `${newsData.title}${newsData.url}${newsData.news_details}`;
     return crypto.createHash('md5').update(contentToHash).digest('hex');
 }
-
+function calculateFinalDelay(min, max, mostLikely,  confidence, severity) {
+    const pert = (min + 4 * mostLikely + max) / 6;
+    const weighted = pert * confidence * (1 + severity / 10);
+    return Math.ceil(weighted);
+  }
 // Process a single news item
 async function processNewsItem(newsItem) {
-    const session = await mongoose.startSession();
-    session.startTransaction();
-    
     try {
-        // Extract required fields from the nested structure
-        const title = newsItem.news?.title;
-        const url = newsItem.news?.url;
-        const news_details = newsItem.impact_description || '';
+        // Extract required fields from the new structure
+        const title = newsItem.news_details?.title;
+        const url = newsItem.news_details?.url;
+        const news_details = newsItem.news_details?.full_summary || '';
+        const summary = newsItem.news_details?.short_summary || '';
         
         // Handle the published_date field properly
         let published_date = new Date(); // Default to current date
-        if (newsItem.news?.date && newsItem.news.date !== "unknown") {
+        if (newsItem.news_details?.date) {
             try {
-                published_date = new Date(newsItem.news.date);
+                published_date = new Date(newsItem.news_details.date);
                 // Check if the date is valid
                 if (isNaN(published_date.getTime())) {
                     published_date = new Date(); // Reset to current date if invalid
                 }
             } catch (error) {
-                console.log(`Invalid date format: ${newsItem.news.date}, using current date instead`);
+                console.log(`Invalid date format: ${newsItem.news_details.date}, using current date instead`);
             }
         }
         
-        const news_location = newsItem.news?.news_location || newsItem.incident_location?.name || 'Unknown';
+        const news_location = newsItem.incident_location?.name || 'Unknown';
         
         // Validate required fields
         if (!title || !url || !news_details) {
-            await session.abortTransaction();
             return {
                 success: false,
                 reason: 'Missing required fields (title, url, or news_details)'
@@ -52,9 +62,8 @@ async function processNewsItem(newsItem) {
         const newsHash = generateNewsHash({ title, url, news_details });
         
         // Check if this news already exists
-        const existingNews = await News.findOne({ news_hash: newsHash }).session(session);
+        const existingNews = await News.findOne({ news_hash: newsHash });
         if (existingNews) {
-            await session.abortTransaction();
             return {
                 success: false,
                 reason: 'Duplicate news item'
@@ -72,15 +81,6 @@ async function processNewsItem(newsItem) {
             console.error('Error extracting image:', error);
         }
 
-        // Generate summary using Gemini API
-        let summary = null;
-        try {
-            summary = await geminiApi.generateSummary(news_details);
-        } catch (error) {
-            console.error('Error generating summary:', error);
-            summary = news_details.substring(0, 100) + '...'; // Fallback to first 100 characters
-        }
-        
         // Create new news document
         const news = new News({
             news_hash: newsHash,
@@ -94,21 +94,20 @@ async function processNewsItem(newsItem) {
         });
         
         // Save news to database
-        await news.save({ session });
+        await news.save();
 
         // Process and store port information
-        const affectedPorts = newsItem.affected_ports || [];
         const portIds = [];
+        const locationData = newsItem.location_data || {};
+        const ports = locationData.ports || [];
 
-        // Handle coordinates based on location type
+        // Handle coordinates based on incident location
         let coordinates = null;
-        if (newsItem.incident_location?.geo_coordinates) {
-            const lat = newsItem.incident_location.geo_coordinates.latitude;
-            const lon = newsItem.incident_location.geo_coordinates.longitude;
+        if (newsItem.incident_location?.coordinates) {
+            const lat = newsItem.incident_location.coordinates.latitude;
+            const lon = newsItem.incident_location.coordinates.longitude;
             
-            // Only set coordinates if both values are valid numbers
-            if (lat !== "unknown" && lon !== "unknown" && 
-                !isNaN(parseFloat(lat)) && !isNaN(parseFloat(lon))) {
+            if (!isNaN(parseFloat(lat)) && !isNaN(parseFloat(lon))) {
                 coordinates = [
                     parseFloat(lon),
                     parseFloat(lat)
@@ -116,50 +115,55 @@ async function processNewsItem(newsItem) {
             }
         }
 
-        for (const portInfo of affectedPorts) {
-            if (portInfo.port_name && portInfo.port_code) {
+        for (const portInfo of ports) {
+            if (portInfo.name && portInfo.code) {
                 // Check if port already exists
-                let port = await Port.findOne({ port_code: portInfo.port_code }).session(session);
+                let port = await Port.findOne({ port_code: portInfo.code });
                 
                 if (!port) {
                     // Create new port if it doesn't exist
                     port = new Port({
-                        port_code: portInfo.port_code,
-                        port_name: portInfo.port_name,
-                        lat_lon: coordinates || [] // Use empty array if coordinates are null
+                        port_code: portInfo.code,
+                        port_name: portInfo.name,
+                        lat_lon: portInfo.coordinates ? [
+                            parseFloat(portInfo.coordinates.longitude),
+                            parseFloat(portInfo.coordinates.latitude)
+                        ] : []
                     });
-                    await port.save({ session });
+                    await port.save();
                 }
                 
                 portIds.push(port._id);
             }
         }
 
+        // Process delay prediction
+        const delayPrediction = newsItem.delay_prediction || {};
+        const estimated_duration_days = calculateFinalDelay(delayPrediction.minimum_days, delayPrediction.maximum_days, delayPrediction.most_likely_days, delayPrediction.confidence_score, delayPrediction.severity_score) || 1;
+        // console.log(estimated_duration_days);
+        const severity = delayPrediction.severity_score || 5;
+        const confidence_score = delayPrediction.confidence_score || 0.5;
+        const location_type = newsItem.incident_type || 'port';
         // Create incident record
-        // Validate coordinates for sea incidents
-        if (newsItem.is_sea_port_issue === 'sea' && (!coordinates || coordinates.length === 0)) {
-            await session.abortTransaction();
-            return {
-                success: false,
-                reason: 'Coordinates are required for sea incidents'
-            };
-        }
-        
         const incident = new Incident({
             source_news: news._id,
-            location_type: newsItem.is_sea_port_issue || 'sea',
+            location_type: location_type,
             affected_ports: portIds,
-            lat_lon: coordinates || [], // Use empty array if coordinates are null
+            lat_lon: coordinates || [],
             start_time: published_date,
-            estimated_duration_days: newsItem.incident_duration || 1,
-            severity: newsItem.significance || 5,
-            status: 'ongoing'
+            estimated_duration_days,
+            severity,
+            confidence_score,
+            status: 'ongoing',
+            delay_prediction: {
+                minimum_days: delayPrediction.minimum_days,
+                maximum_days: delayPrediction.maximum_days,
+                most_likely_days: delayPrediction.most_likely_days,
+                confidence_score: delayPrediction.confidence_score
+            }
         });
 
-        await incident.save({ session });
-        
-        // If everything is successful, commit the transaction
-        await session.commitTransaction();
+        await incident.save();
         
         return {
             success: true,
@@ -168,15 +172,10 @@ async function processNewsItem(newsItem) {
             title
         };
     } catch (error) {
-        // If any error occurs, abort the transaction
-        await session.abortTransaction();
         return {
             success: false,
             reason: error.message
         };
-    } finally {
-        // Always end the session
-        session.endSession();
     }
 }
 
@@ -229,3 +228,17 @@ module.exports = {
     getNewsById,
     getAllNews
 };
+
+
+if (require.main === module) {
+    const response = require('../../data/shipment_incidents.json');
+    processNewsItems(response).then((response) => {
+        console.log(response);
+        mongoose.connection.close();
+        console.log('MongoDB connection closed');
+    }).catch(error => {
+        console.error('❌ Analysis failed:', error);
+        mongoose.connection.close();
+        console.log('MongoDB connection closed');
+    });
+}
