@@ -405,7 +405,6 @@ class NewsAnalyzer {
         For PORT incidents:
         - List ALL affected ports with their:
           * Port name
-          * Port code (if available, otherwise search for the port code through web search even if you can't fine mark it as unknown)
           * Geographic coordinates (latitude, longitude)
         
         For SEA incidents:
@@ -439,7 +438,6 @@ class NewsAnalyzer {
                         "ports": [
                             {
                                 "name": "port_name",
-                                "code": "port_code",
                                 "coordinates": {
                                     "latitude": 0.0,
                                     "longitude": 0.0
@@ -465,7 +463,7 @@ class NewsAnalyzer {
         Geographic relevance to the incident
         Known trade hubs or choke points in the region
         Historical incidents of similar nature
-        Include approximate coordinates, official port codes (if available), and port names based on reliable sources. Avoid using placeholders like "Unknown" unless no credible data is found after search attempts.
+        Include approximate coordinates and port names based on reliable sources. Avoid using placeholders like "Unknown" unless no credible data is found after search attempts.
         3. If no incidents found, return {"incidents": []}
         4. For port incidents, include ALL potentially affected ports
         5. For sea incidents, provide the most precise coordinates possible
@@ -488,6 +486,27 @@ class NewsAnalyzer {
         try {
             const parsedResponse = JSON.parse(jsonText);
             console.log("Location Data Extraction Completed ----------");
+
+            // Get port codes and coordinates for all port incidents
+            for (const incident of parsedResponse.incidents) {
+                if (incident.incident_type === 'port' && incident.location_data?.ports?.length > 0) {
+                    const portNames = incident.location_data.ports.map(port => port.name);
+                    const portDetails = await this.getPortCodesAndCoordinates(portNames);
+                    
+                    // Update port information with codes and coordinates
+                    for (const port of incident.location_data.ports) {
+                        const matchingPort = portDetails.find(p => p.port_name === port.name);
+                        if (matchingPort) {
+                            port.code = matchingPort.port_code;
+                            port.coordinates = {
+                                latitude: matchingPort.lat_lon[0],
+                                longitude: matchingPort.lat_lon[1]
+                            };
+                        }
+                    }
+                }
+            }
+
             return parsedResponse.incidents;
         } catch (error) {
             console.error("Error parsing Gemini response:", error);
@@ -656,6 +675,62 @@ class NewsAnalyzer {
 
         console.log("Comprehensive Incident Analysis Completed ----------");
         return combinedData;
+    }
+
+    async getPortCodesAndCoordinates(portNames) {
+        console.log("Starting Port Code and Coordinates Extraction ----------");
+        const prompt = `
+        You are a logistics and supply chain expert. I will give you a list of port names. Your task is to provide the port code and geographical coordinates for each port.
+
+        For each port, provide:
+        - Port name (as given)
+        - Port code (UN/LOCODE format if available, otherwise use "UNKNOWN")
+        - Geographic coordinates (latitude, longitude)
+
+        Return a JSON object with the following structure:
+        {
+            "ports": [
+                {
+                    "port_name": "Port Name",
+                    "port_code": "PORTCODE",
+                    "lat_lon": [latitude, longitude]
+                }
+            ]
+        }
+
+        Rules:
+        1. Return ONLY the JSON object, no additional text
+        2. Use UN/LOCODE format for port codes (e.g., "USNYC" for New York)
+        3. If port code is not available, use "UNKNOWN"
+        4. Provide coordinates in decimal degrees format
+        5. If coordinates are not available, use [0, 0]
+        6. Include ALL ports in the response, even if some information is missing
+
+        Here's the list of ports to analyze:
+        ${JSON.stringify(portNames, null, 2)}
+        `;
+
+        console.log('\n🤖 Sending to Gemini API for port code and coordinates extraction...');
+        console.log(prompt);
+        const model = this.genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        const text = response.text().trim();
+        
+        let jsonText = text;
+        if (text.startsWith("```")) {
+            jsonText = text.replace(/```json|```/g, '').trim();
+        }
+        
+        try {
+            const parsedResponse = JSON.parse(jsonText);
+            console.log("Port Code and Coordinates Extraction Completed ----------");
+            return parsedResponse.ports;
+        } catch (error) {
+            console.error("Error parsing Gemini response:", error);
+            console.error("Raw response:", text);
+            throw new Error("Failed to parse Gemini API response as JSON");
+        }
     }
 }
 
