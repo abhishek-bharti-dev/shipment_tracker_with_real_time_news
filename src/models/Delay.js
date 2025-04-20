@@ -42,8 +42,7 @@ const seaDelaySchema = new mongoose.Schema({
 
 const delaySchema = new mongoose.Schema({
   shipment: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'VesselTracking',
+    type: String,
     required: true
   },
   location_type: {
