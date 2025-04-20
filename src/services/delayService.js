@@ -7,6 +7,7 @@ const User = require('../models/User');
 const Shipment = require('../models/Shipment');
 const emailService = require('./emailService');
 const notificationHandler = require('../handlers/notificationHandler');
+const GocometPort = require('../models/gocomet_ports');
 
 // Define the GocometShipload model outside the function
 const GocometShipload = mongoose.model('gocomet_shiploads', new mongoose.Schema({
@@ -385,19 +386,19 @@ class DelayService {
             console.log(`\n=== Processing Ports and Shiploads ===`);
             console.log('----------------------------------------');
             
-            // 4. Get GocometPort model with correct schema
-            const GocometPort = mongoose.model('gocomet_ports', new mongoose.Schema({
-                id: String,
-                code: String,
-                name: String,
-                display_name: String
-            }, { 
-                collection: 'gocomet_ports'
-            }));
-            
             let totalMatchingShiploads = 0;
             let totalDelaysUpdated = 0;
             let printedCount = 0;
+            
+            // 4. Get GocometPort model with correct schema
+            // const GocometPort = mongoose.model('gocomet_ports', new mongoose.Schema({
+            //     id: String,
+            //     code: String,
+            //     name: String,
+            //     display_name: String
+            // }, { 
+            //     collection: 'gocomet_ports'
+            // }));
             
             // 5. For each port, find matching gocomet port and then find matching shiploads
             for (const port of ports) {
@@ -535,13 +536,6 @@ class DelayService {
                 }
             }
             
-            console.log('\n=== Summary ===');
-            console.log('----------------------------------------');
-            console.log(`Total incidents processed: ${incidents.length}`);
-            console.log(`Total unique affected ports: ${affectedPortIds.size}`);
-            console.log(`Total matching shiploads: ${totalMatchingShiploads}`);
-            console.log(`Total delays updated: ${totalDelaysUpdated}`);
-            
             return {
                 success: true,
                 message: 'Port delay processing completed',
@@ -580,13 +574,9 @@ class DelayService {
 
     async handleSeaDelay(incident, shipment_id) {
         try {
-            // console.log("incident_id", incident._id);
-            // console.log("shipment_id", shipment._id);
-            // console.log("incident:- ",incident);
-            // console.log("shipment:- ",shipment_id);
             // Find existing delay record for this shipment
             let delayRecord = await Delay.findOne({shipment: shipment_id});
-            // console.log(delayRecord);
+            
             if(!delayRecord){
                 delayRecord = new Delay({
                     shipment: shipment_id,
@@ -595,21 +585,42 @@ class DelayService {
                 });
             }
             const delayDays = await this.calculateSeaDelay(incident);
-            // console.log("incident duration ",incident.estimated_duration_days);
-            // console.log("start date ",incident.start_time);
-            // console.log("delayDays",delayDays);
             
             if (delayDays>0) {
-                // If port exists, update the delay and add the incident
-                delayRecord.sea_delays.push({
-                    lat_lon: incident.lat_lon,
-                    incidents: [incident._id],
-                    delay_days: delayDays,
-                    updatedAt: new Date()
-                }); 
+                // Check if there's already a sea delay with the same lat/lon
+                const existingSeaDelayIndex = delayRecord.sea_delays.findIndex(
+                    delay => JSON.stringify(delay.lat_lon) === JSON.stringify(incident.lat_lon)
+                );
+
+                let shouldIncrementShipments = false;
+
+                if (existingSeaDelayIndex !== -1) {
+                    // Update existing sea delay
+                    const existingDelay = delayRecord.sea_delays[existingSeaDelayIndex];
+                    existingDelay.delay_days = Math.max(existingDelay.delay_days, delayDays);
+                    if (!existingDelay.incidents.includes(incident._id)) {
+                        existingDelay.incidents.push(incident._id);
+                        shouldIncrementShipments = true;
+                    }
+                    existingDelay.updatedAt = new Date();
+                } else {
+                    // Add new sea delay if no duplicate exists
+                    delayRecord.sea_delays.push({
+                        lat_lon: incident.lat_lon,
+                        incidents: [incident._id],
+                        delay_days: delayDays,
+                        updatedAt: new Date()
+                    });
+                    shouldIncrementShipments = true;
+                }
+                
                 await delayRecord.save();
                 await Incident.findByIdAndUpdate(incident._id, { delay_updated: true });
-                await Incident.findByIdAndUpdate(incident._id, { $inc: { total_shipments_affected: 1 } });
+                
+                // Only increment total_shipments_affected if we added a new incident to a location
+                if (shouldIncrementShipments) {
+                    await Incident.findByIdAndUpdate(incident._id, { $inc: { total_shipments_affected: 1 } });
+                }
             }
         } catch (error) {
             console.error('Error in handleSeaDelay:', error);
@@ -626,10 +637,12 @@ class DelayService {
             console.log("total un-updated sea incidents:- ",seaIncidents.length);
             
             for (const incident of seaIncidents) {
-                // const lat = incident.lat_lon[0];
-                // const lon = incident.lat_lon[1];
-                const lat = 35.05833;
-                const lon = 128.9978;
+                const lat = incident.lat_lon[0];
+                const lon = incident.lat_lon[1];
+                // const lat = 35.05833;
+                // const lon = 128.9978;
+                // const lat = 38;
+                // const lon = 20;
                 
                 // Find vessels within 15km range using geospatial query
                 const vesselsInTransit = await gocomet_vessel_trackings.find({
@@ -647,7 +660,7 @@ class DelayService {
                 // console.log(vesselsInTransit)
                 console.log(`Found ${vesselsInTransit.length} vessels within 15km of incident`);
                 for (const vessel of vesselsInTransit) {
-                    // console.log(vessel)
+                    console.log("vessel_id:- ",vessel._id);
                     // console.log(vessel.shipload_ids);
                     for(const shipload_id of vessel.shipload_ids){
                     //     console.log(shipload_id);
@@ -671,93 +684,11 @@ class DelayService {
     async processUnupdatedDelayIncidents() {
         try {
             await this.processUnupdatedDelayPort();
-            // await this.processUnupdatedDelaySea();
+            await this.processUnupdatedDelaySea();
         } catch (error) {
             console.error('Error in processUnupdatedDelayIncidents:', error);
             throw error;
         }
-    }
-
-    /**
-     * Calculate delay in days for a vessel based on incident
-     * @param {Object} incident - The incident document
-     * @param {Object} vessel - The vessel tracking document
-     * @returns {Number} Delay in days
-     */
-    async calculateDelay(incident, vessel) {
-        try {
-            // Find the relevant event for the port
-            const portEvent = vessel.events.find(event => 
-                event.port_code && 
-                incident.affected_ports.some(port => port.port_code === event.port_code)
-            );
-            // console.log(portEvent);
-
-            if (!portEvent || !portEvent.expected_time_of_arrival) {
-                return 0;
-            }
-
-            const expectedArrival = new Date(portEvent.expected_time_of_arrival);
-            const incidentCreatedAt = new Date(incident.createdAt);
-            const incidentDelay = incident.estimated_duration_days;
-            // console.log("expectedArrival", expectedArrival);
-            // console.log("incidentCreatedAt", incidentCreatedAt);
-            // console.log("incidentDelay", incidentDelay);
-
-            // Calculate total delay
-            const totalDelay = Math.max(0, incidentDelay - 
-                Math.floor((expectedArrival - incidentCreatedAt) / (1000 * 60 * 60 * 24)));
-
-            return totalDelay;
-        } catch (error) {
-            console.error('Error in calculateDelay:', error);
-            throw error;
-        }
-    }
-
-    /**
-     * Send email notifications for processed delays
-     * @param {Array} notifications - Array of delay notifications
-     * @returns {Promise<Object>} Email sending results
-     */
-    async sendDelayEmailNotifications(notifications) {
-        const emailResults = {
-            sent: 0,
-            failed: 0,
-            errors: []
-        };
-
-        for (const notification of notifications) {
-            try {
-                const emailResult = await emailService.sendDelayNotification({
-                    to: notification.userEmail,
-                    userName: notification.userName,
-                    shipmentId: notification.shipmentId,
-                    delayType: notification.delayType,
-                    seaIssues: notification.seaIssues,
-                    affectedPorts: notification.affectedPorts,
-                    totalDelay: notification.totalDelay
-                });
-
-                if (emailResult.success) {
-                    emailResults.sent++;
-                } else {
-                    emailResults.failed++;
-                    emailResults.errors.push({
-                        shipmentId: notification.shipmentId,
-                        error: emailResult.message
-                    });
-                }
-            } catch (error) {
-                emailResults.failed++;
-                emailResults.errors.push({
-                    shipmentId: notification.shipmentId,
-                    error: error.message
-                });
-            }
-        }
-
-        return emailResults;
     }
 }
 

@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 require('dotenv').config();
+const GocometPort = require('../models/gocomet_ports');
 
 // MongoDB connection configuration
 const MONGODB_URI = process.env.DATABASE_URI3 || 'mongodb://192.168.0.107:27017/shipment_tracker';
