@@ -7,6 +7,27 @@ const User = require('../models/User');
 const Shipment = require('../models/Shipment');
 const emailService = require('./emailService');
 const notificationHandler = require('../handlers/notificationHandler');
+
+// Define the GocometShipload model outside the function
+const GocometShipload = mongoose.model('gocomet_shiploads', new mongoose.Schema({
+  id: String,
+  status: Number,
+  events: {
+    type: Map,
+    of: {
+      port: {
+        id: String,
+        name: String,
+        port_code: String
+      },
+      planned_date: Date,
+      actual_date: Date,
+      mode: Number,
+      original_planned_date: Date
+    }
+  }
+}));
+
 class DelayService {
     // Haversine formula to calculate distance between two points on Earth
     calculateDistance(lat1, lon1, lat2, lon2) {
@@ -209,67 +230,167 @@ class DelayService {
         }
     }
 
+    async calculateShiploadDelay(incidentId, shiploadId, portId) {
+        try {
+            // Get incident details
+            const incident = await Incident.findById(incidentId);
+            if (!incident) {
+                console.log(`No incident found with ID: ${incidentId}`);
+                return null;
+            }
+
+            // Get shipload details
+            const shipload = await GocometShipload.findById(shiploadId);
+            if (!shipload) {
+                console.log(`No shipload found with ID: ${shiploadId}`);
+                return null;
+            }
+
+            // Convert events Map to array and find matching port event
+            const eventsArray = Array.from(shipload.events.entries());
+            const portEvent = eventsArray.find(([_, event]) => event.port.id === portId);
+
+            if (!portEvent) {
+                console.log(`No event found for port ID: ${portId} in shipload: ${shiploadId}`);
+                return null;
+            }
+
+            const [_, event] = portEvent;
+
+            // Calculate expected date based on original planned date and delay
+            const expectedDate = new Date(event.original_planned_date);
+            expectedDate.setDate(expectedDate.getDate() + (incident.estimated_duration_days * incident.severity));
+
+            return {
+                shiploadId,
+                portId,
+                originalPlannedDate: event.original_planned_date,
+                expectedDate,
+                delayDays: incident.estimated_duration_days * incident.severity,
+                severity: incident.severity,
+                estimatedDuration: incident.estimated_duration_days
+            };
+        } catch (error) {
+            console.error('Error in calculateShiploadDelay:', error);
+            return null;
+        }
+    }
+
     async processUnupdatedDelayPort() {
         try {
-            let vessels=[]
-            const incidents = await Incident.find({ delay_updated: false })
-                .populate('source_news')
-                .populate('affected_ports');
-            // filter those incident where location_type is port
-            const portIncidents = incidents.filter(incident => incident.location_type === 'port');
-            // console.log(portIncidents.length);
-            // console.log(portIncidents);
-            // get all the port codes from the portIncidents
-            const portCodes = portIncidents.map(incident => incident.affected_ports.map(port => port.port_code));
-            // console.log(portCodes);
-
-            // get all who are in transit
-            const vesselsInTransit = await VesselTracking.find({ status: 'intransit' });
-            // console.log(vesselsInTransit.length);
-            // console.log(vesselsInTransit);
-            //loop over incidents and check if the port code is in the vesselsInTransit also it it present it should not have actual_time_of_arrival
-            // console.log('\n=== Starting Port-Vessel Matching Analysis ===');
-            // console.log(`Total Port Incidents: ${portIncidents.length}`);
-            // console.log(`Total Vessels in Transit: ${vesselsInTransit.length}\n`);
-
-            for (const incident of portIncidents) {
-                for (const port of incident.affected_ports) {
-                    let matchFound = false;
-                    for (const vessel of vesselsInTransit) {
-                        const matchingEvent = vessel.events.find(event => event.port_code === port.port_code);
-                        //check for that port it should not have actual_time_of_arrival
-                        const portEvent = vessel.events.find(event => event.port_code === port.port_code);
+            console.log('\n=== Query Results ===');
+            console.log('----------------------------------------');
+            
+            // 1. Get all incidents where delay_updated is false
+            const incidents = await Incident.find({ delay_updated: false });
+            console.log(`Total incidents with delay_updated=false: ${incidents.length}`);
+            
+            // 2. Get all affected ports from these incidents
+            const affectedPortIds = new Set();
+            incidents.forEach(incident => {
+                if (incident.affected_ports && incident.affected_ports.length > 0) {
+                    incident.affected_ports.forEach(port => {
+                        affectedPortIds.add(port.toString());
+                    });
+                }
+            });
+            
+            console.log(`Total unique affected ports: ${affectedPortIds.size}`);
+            
+            // 3. Get port details from our port collection
+            const ports = await Port.find({ 
+                _id: { $in: Array.from(affectedPortIds) }
+            }, { 
+                _id: 1, 
+                port_code: 1, 
+                port_name: 1 
+            });
+            
+            console.log(`\n=== Port Details and Matching Shiploads ===`);
+            console.log('----------------------------------------');
+            
+            // 4. Get GocometPort model with correct schema
+            const GocometPort = mongoose.model('gocomet_ports', new mongoose.Schema({
+                id: String,
+                code: String,
+                name: String,
+                display_name: String
+            }, { 
+                collection: 'gocomet_ports'
+            }));
+            
+            let totalMatchingShiploads = 0;
+            
+            // 5. For each port, find matching gocomet port and then find matching shiploads
+            for (const port of ports) {
+                const gocometPort = await GocometPort.findOne({ 
+                    code: port.port_code 
+                });
+                
+                if (gocometPort) {
+                    console.log(`\n----------------------------------------`);
+                    console.log(`Port ID: ${gocometPort.id}`);
+                    console.log(`Port Code: ${port.port_code}`);
+                    console.log(`Port Name: ${port.port_name}`);
+                    
+                    // Find matching shiploads using aggregation pipeline
+                    const matchingShiploads = await GocometShipload.aggregate([
+                        // Match shiploads with status 2
+                        { $match: { status: 2 } },
                         
-                        if (portEvent && !portEvent.actual_time_of_arrival) {
-                            matchFound = true;
-                            console.log("incident_id", incident._id);
-                            console.log("vessel_id", vessel._id);
-                            const shipment = await Shipment.findOne({ tracking_id: vessel._id });
-                            if (!shipment) {
-                                console.log(`No shipment found for vessel tracking ID: ${vessel._id}`);
-                                continue;
-                            }
-                            console.log("shipment_id", shipment._id);
-                            console.log("port_code", port.port_code);
-                            console.log("delay_days", incident.estimated_duration_days);
-                                                       
-                            if (!matchingEvent.actual_time_of_arrival) {
-                                await this.handlePortDelay(incident, vessel, shipment, port.port_code);
-                                vessels.push(vessel);
-                            }
+                        // Convert events object to array
+                        { $project: {
+                            id: 1,
+                            eventArray: { $objectToArray: '$events' }
+                        }},
+                        
+                        // Unwind the events array
+                        { $unwind: '$eventArray' },
+                        
+                        // Match events with mode 0 and actual_date exists
+                        { $match: {
+                            'eventArray.v.mode': 1,
+                            'eventArray.v.actual_date': null,
+                            'eventArray.v.port.id': gocometPort.id
+                        }},
+                        
+                        // Group by shipload ID to get unique shiploads
+                        { $group: {
+                            _id: '$id',
+                            count: { $sum: 1 }
+                        }}
+                    ]);
+                    
+                    console.log(`Total matching shiploads: ${matchingShiploads.length}`);
+                    if (matchingShiploads.length > 0) {
+                        console.log('\nShipload IDs (showing first 5):');
+                        for (const shipload of matchingShiploads.slice(0, 5)) {
+                            console.log(`- ID: ${shipload._id} (${shipload.count} matching events)`);
+                        }
+                        if (matchingShiploads.length > 5) {
+                            console.log(`... and ${matchingShiploads.length - 5} more shiploads`);
                         }
                     }
                     
+                    totalMatchingShiploads += matchingShiploads.length;
+                } else {
+                    console.log(`\nNo matching Gocomet port found for ${port.port_code}`);
                 }
             }
             
-            console.log('\n=== Final Results for port incidents ===');
-            console.log(`Total Vessels Added: ${vessels.length}`);
-            console.log('Vessel IDs:', vessels.map(v => v._id));
-            console.log('================================\n');
-            return vessels;
+            console.log('\n=== Summary ===');
+            console.log('----------------------------------------');
+            console.log(`Total incidents processed: ${incidents.length}`);
+            console.log(`Total unique affected ports: ${affectedPortIds.size}`);
+            console.log(`Total matching shiploads: ${totalMatchingShiploads}`);
+            
+            return {
+                success: true,
+                message: 'Port delay processing completed'
+            };
+            
         } catch (error) {
-            console.error('Error fetching unupdated delay incidents:', error);
+            console.error('Error in processUnupdatedDelayPort:', error);
             throw error;
         }
     }
@@ -390,7 +511,7 @@ class DelayService {
     async processUnupdatedDelayIncidents() {
         try {
             await this.processUnupdatedDelayPort();
-            await this.processUnupdatedDelaySea();
+            // await this.processUnupdatedDelaySea();
         
     //         // Get all incidents where delay_updated is false
     //         const unupdatedIncidents = await Incident.find({ delay_updated: false })
@@ -685,5 +806,6 @@ class DelayService {
         return emailResults;
     }
 }
+
 
 module.exports = new DelayService(); 

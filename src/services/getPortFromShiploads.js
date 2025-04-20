@@ -34,91 +34,93 @@ async function getPortsFromShiploads() {
 
         console.time('Query Execution');
 
-        // First get total count of status 2 documents
-        const totalStatus2Count = await Shipload.countDocuments({ status: 2 });
-
-        // Use aggregation pipeline for better performance
-        const pipeline = [
-            // Match status 2 documents
+        // Get shiploads with their port information and planned dates
+        const portPipeline = [
+            // Match status 2 shiploads
             { $match: { status: 2 } },
             
-            // Add a stage to ensure events exist
-            { $match: { events: { $exists: true } } },
-            
-            // Project only needed fields and do initial filtering
+            // Convert events object to array
             { $project: {
-                _id: 1,
+                shipload_id: '$_id',
                 eventArray: { $objectToArray: '$events' }
             }},
             
-            // Unwind events array
+            // Unwind the events array
             { $unwind: '$eventArray' },
             
-            // Filter events with mode 1 and has port
+            // Match events with mode 1 and null actual_date
             { $match: {
                 'eventArray.v.mode': 1,
                 'eventArray.v.port': { $exists: true },
-                'eventArray.v.port.id': { $exists: true }
+                'eventArray.v.port.id': { $exists: true },
+                'eventArray.v.actual_date': null
             }},
             
-            // Group by shipload ID and collect unique port IDs
+            // Project required fields
+            { $project: {
+                shipload_id: 1,
+                port_id: '$eventArray.v.port.id',
+                planned_date: '$eventArray.v.planned_date'
+            }},
+            
+            // Group by port_id
             { $group: {
-                _id: '$_id',
-                portIds: { $addToSet: '$eventArray.v.port.id' }
-            }},
-            
-            // Facet to get all required statistics in one go
-            { $facet: {
-                shiploadsWithPorts: [
-                    { $group: {
-                        _id: null,
-                        shiploadIds: { $addToSet: '$_id' },
-                        allPortIds: { $push: '$portIds' }
-                    }}
-                ],
-                portStats: [
-                    { $unwind: '$portIds' },
-                    { $group: {
-                        _id: null,
-                        uniquePorts: { $addToSet: '$portIds' },
-                        totalPorts: { $sum: 1 }
-                    }}
-                ]
+                _id: '$port_id',
+                shipments: { 
+                    $push: {
+                        shipload_id: '$shipload_id',
+                        planned_date: '$planned_date'
+                    }
+                }
             }}
         ];
 
-        const [result] = await Shipload.aggregate(pipeline).exec();
-
+        const portShipmentData = await Shipload.aggregate(portPipeline).exec();
         console.timeEnd('Query Execution');
 
-        // Extract statistics
-        const shiploadsWithPorts = result.shiploadsWithPorts[0] || { shiploadIds: [], allPortIds: [] };
-        const portStats = result.portStats[0] || { uniquePorts: [], totalPorts: 0 };
+        // Define port schema
+        const portSchema = new mongoose.Schema({
+            id: String,
+            name: String,
+            code: String
+        }, { collection: 'gocomet_ports' });
 
-        const stats = {
-            totalShiploadsWithStatus2: totalStatus2Count,
-            shiploadsWithMode1Events: shiploadsWithPorts.shiploadIds.length,
-            totalUniquePorts: portStats.uniquePorts.length,
-            totalPorts: portStats.totalPorts
-        };
+        // Register the model
+        const Port = mongoose.models.Port || mongoose.model('Port', portSchema);
 
-        // Print summary
-        console.log('\nStatistics:');
-        console.log(`Total shiploads with status 2: ${stats.totalShiploadsWithStatus2}`);
-        console.log(`Shiploads with mode 1 events: ${stats.shiploadsWithMode1Events}`);
-        console.log(`Shiploads without mode 1 events: ${stats.totalShiploadsWithStatus2 - stats.shiploadsWithMode1Events}`);
-        console.log(`Total ports found: ${stats.totalPorts}`);
-        console.log(`Total unique ports across all shiploads: ${stats.totalUniquePorts}`);
+        // Get all unique port IDs
+        const uniquePortIds = portShipmentData.map(item => item._id);
 
-        // Create the return object
-        const portsByShipload = {};
-        if (shiploadsWithPorts.shiploadIds.length > 0) {
-            shiploadsWithPorts.shiploadIds.forEach((id, index) => {
-                portsByShipload[id.toString()] = shiploadsWithPorts.allPortIds[index];
-            });
-        }
+        // Fetch port details
+        const ports = await Port.find(
+            { id: { $in: uniquePortIds } },
+            { id: 1, code: 1, name: 1 }
+        ).lean();
 
-        return portsByShipload;
+        // Create a map of port IDs to port codes
+        const portCodeMap = new Map(ports.map(port => [port.id, { code: port.code, name: port.name }]));
+
+        // Combine port and shipment data
+        const result = {};
+        portShipmentData.forEach(portData => {
+            const portInfo = portCodeMap.get(portData._id);
+            if (portInfo) {
+                result[portData._id] = {
+                    port_code: portInfo.code,
+                    port_name: portInfo.name,
+                    shipments: portData.shipments.map(shipment => ({
+                        shipload_id: shipment.shipload_id.toString(),
+                        planned_date: shipment.planned_date
+                    }))
+                };
+            }
+        });
+
+        // Print the result in a formatted way
+        console.log('\nPort and Shipment Data:');
+        console.log(JSON.stringify(result, null, 2));
+
+        return result;
 
     } catch (error) {
         console.error('Error in getPortsFromShiploads:', error.message);

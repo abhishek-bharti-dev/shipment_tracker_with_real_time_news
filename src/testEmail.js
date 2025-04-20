@@ -1,30 +1,24 @@
-require('dotenv').config();
-const emailService = require('./services/emailService');
+const mongoose = require('mongoose');
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
+const connectDB = require('./config/database');
+const DelayService = require('./services/delayService');
 
-const testData = {
-    userName: "Tauhid",
-    userEmail: "asadneyaz5555@gmail.com",
-    shipmentId: "67f0f7f42bcd1aaeba07ac60",
-    delayType: "sea",
-    seaIssues: [
-        {
-            incidentId: "67eeece0501f721c7f28136e",
-            delayDays: 29,
-            reason: "S. Union attack brings Red Sea shipping crisis back to fore",
-            startDate: "2025-04-03T20:17:36.684Z"
-        }
-    ],
-    affectedPorts: [],
-    totalDelay: 29    
-};
-
-async function sendTestEmail() {
+async function testDelayProcessing() {
     try {
-        const result = await emailService.sendDetailedIncidentNotification(testData);
-        console.log('✅ Email sent:', result);
-    } catch (err) {
-        console.error('❌ Email failed:', err.message);
+        console.log('Connecting to MongoDB...');
+        await connectDB();
+        console.log('Connected to MongoDB successfully');
+
+        console.log('\nRunning processUnupdatedDelayPort...');
+        await DelayService.processUnupdatedDelayPort();
+
+    } catch (error) {
+        console.error('Error during test:', error);
+    } finally {
+        await mongoose.disconnect();
+        console.log('\nMongoDB connection closed');
     }
 }
 
-sendTestEmail();
+testDelayProcessing(); 
