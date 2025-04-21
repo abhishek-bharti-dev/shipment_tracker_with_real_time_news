@@ -1,38 +1,66 @@
-const Shipment = require('../models/Shipment');
 const User = require('../models/User');
-const VesselTracking = require('../models/VesselTracking');
+const GocometShipload = require('../models/GocometShipload');
 
 const getIntransitAndDelayedShipments = async (id) => {
     try {
-        // console.log("id", id);
-        const shipments = await Shipment.find({ client_id: id })
-            .populate({
-                path: 'tracking_id',
-                select: 'status'
-            });
-        // console.log("shipments", shipments);
+        // Find user's shipload IDs from users table
+        const user = await User.findById(id);
+        if (!user) {
+            return {
+                shipmentInTransit: 0,
+                shipmentDelivered: 0
+            };
+        }
 
+        const shiploadsIds = user.shiploads_ids || [];
+        if (shiploadsIds.length === 0) {
+            return {
+                shipmentInTransit: 0,
+                shipmentDelivered: 0
+            };
+        }
 
-        // Initialize counters
-        let shipmentInTransit = 0;
-        let shipmentDelivered = 0;
-
-        // return "hello";
-
-        // Count shipments by status
-        shipments.forEach(shipment => {
-            if (shipment.tracking_id) {
-                if (shipment.tracking_id.status === 'intransit') {
-                    shipmentInTransit++;
-                } else if (shipment.tracking_id.status === 'delivered') {
-                    shipmentDelivered++;
+        // Get in-transit shipments using aggregation
+        const inTransitShipments = await GocometShipload.aggregate([
+            {
+                $match: {
+                    status: 2
+                }
+            },
+            {
+                $addFields: {
+                    idString: { $toString: "$id" }
+                }
+            },
+            {
+                $match: {
+                    idString: { $in: shiploadsIds }
                 }
             }
-        });
+        ]);
+
+        // Get completed shipments using aggregation
+        const completedShipments = await GocometShipload.aggregate([
+            {
+                $match: {
+                    status: 3
+                }
+            },
+            {
+                $addFields: {
+                    idString: { $toString: "$id" }
+                }
+            },
+            {
+                $match: {
+                    idString: { $in: shiploadsIds }
+                }
+            }
+        ]);
 
         return {
-            shipmentInTransit,
-            shipmentDelivered
+            shipmentInTransit: inTransitShipments.length,
+            shipmentDelivered: completedShipments.length
         };
     } catch (error) {
         console.error('Error in getIntransitAndDelayedShipments:', error);
@@ -42,4 +70,4 @@ const getIntransitAndDelayedShipments = async (id) => {
 
 module.exports = {
     getIntransitAndDelayedShipments
-}; 
+};
