@@ -1,9 +1,11 @@
 const Shipment = require('../models/Shipment');
 const Incident = require('../models/Incident');
 const Port = require('../models/Port');
-const User = require('../models/User');
 const VesselTracking = require('../models/VesselTracking');
 const Delay = require('../models/Delay');
+const User = require('../models/User')
+const GocometShipload = require('../models/GocometShipload')
+const { Buffer } = require('buffer');
 
 class ShipmentStatusService {
     static getStatusFromSeverity(severity) {
@@ -14,36 +16,56 @@ class ShipmentStatusService {
 
     async getShipmentStatistics(user_id) {
         try {
-            console.log("user_id", user_id);
-            const shipments = await Shipment.find({ client_id: user_id }).populate('tracking_id');
-            const shipmentInTransit = [];
-            for(const shipment of shipments){
-                // console.log("shipment", shipment)
-                if(shipment.tracking_id.status === 'intransit'){
-                    shipmentInTransit.push(shipment);
+            // console.log("user_id", user_id);
+            const shipments = await User.find({ _id: user_id });
+            const user = shipments[0];
+            const shiploadsIds = user.shiploads_ids;
+            // console.log(shiploadsIds);
+            // console.log("total shiploads of user",shiploadsIds.length);
+
+            // Get all shipments that are in transit (status 2) using aggregation
+            const inTransitShipments = await GocometShipload.aggregate([
+                {
+                    $match: {
+                        status: 2
+                    }
+                },
+                {
+                    $addFields: {
+                        idString: { $toString: "$id" }
+                    }
+                },
+                {
+                    $match: {
+                        idString: { $in: shiploadsIds }
+                    }
                 }
-            }
-            // console.log("shipments", shipmentInTransit);
-            console.log("shipments.length", shipmentInTransit.length);
-            // return shipmentInTransit;
+            ]);
+
+            // console.log("in transit shipments:- ",inTransitShipments.length);
 
             // Initialize stats
             const stats = {
-                shipmentInTransit: shipmentInTransit.length,
+                shipmentInTransit: inTransitShipments.length,
                 shipmentNotAffected: 0,
                 shipmentUnderCaution: 0,
                 shipmentUnderDanger: 0
             };
 
-            const shipmentIds = shipmentInTransit.map(s => s._id);
-            // console.log("shipmentIds", shipmentIds);
-            // return shipmentIds;
+            if (inTransitShipments.length === 0) {
+                return {
+                    success: true,
+                    data: stats
+                };
+            }
 
-            // Get all delays in one query
+            const shipmentIds = inTransitShipments.map(s => s.id);
+            // console.log("shipment in transit ids ",shipmentIds);
+
+            // Get all delays for these shipments
             const delays = await Delay.find({ shipment: { $in: shipmentIds } });
-            // console.log("delays", delays);
-            // console.log("delays.length", delays.length);
-            stats.shipmentNotAffected = shipmentInTransit.length - delays.length;
+            // console.log(delays);
+            stats.shipmentNotAffected = inTransitShipments.length - delays.length;
 
             // Collect all incident IDs from affected ports and sea delays
             const incidentIds = new Set();
@@ -64,10 +86,8 @@ class ShipmentStatusService {
 
                 // Get incident IDs from sea delays
                 if (delay.sea_delays && delay.sea_delays.length > 0) {
-                    // console.log("delay.sea_delays", delay.sea_delays);
                     delay.sea_delays.forEach(seaDelay => {
                         if (seaDelay.incidents && Array.isArray(seaDelay.incidents)) {
-                            // console.log("seaDelay", seaDelay.incidents);
                             incidentIdsForDelay.push(...seaDelay.incidents);
                             seaDelay.incidents.forEach(id => incidentIds.add(id.toString()));
                         }
@@ -75,9 +95,6 @@ class ShipmentStatusService {
                 }
                 shipmentToIncidents.set(delay.shipment.toString(), incidentIdsForDelay);
             }
-
-            console.log("incidentIds", incidentIds);
-            console.log("shipmentwithdelays", delays.length);
 
             // Fetch all incidents at once
             const incidents = await Incident.find({ _id: { $in: Array.from(incidentIds) } }).lean();

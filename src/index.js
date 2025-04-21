@@ -4,6 +4,10 @@ const express = require('express');
 const mongoose = require('mongoose');
 const app = express();
 const port = process.env.PORT || 3000;
+
+// Increase max listeners to prevent warnings
+require('events').EventEmitter.defaultMaxListeners = 20;
+
 const connectDB = require('./config/database');
 const authRoutes = require('./routes/auth');
 const newsIngestionRoutes = require('./routes/newsIngestionRoutes');

@@ -32,6 +32,10 @@ const userSchema = new mongoose.Schema({
         type: Boolean,
         default: true
     },
+    shiploads_ids:{
+        type: Array,
+        default: true
+    },
     lastLogin: {
         type: Date
     },
