@@ -8,26 +8,7 @@ const Shipment = require('../models/Shipment');
 const emailService = require('./emailService');
 const notificationHandler = require('../handlers/notificationHandler');
 const GocometPort = require('../models/gocomet_ports');
-
-// Define the GocometShipload model outside the function
-const GocometShipload = mongoose.model('gocomet_shiploads', new mongoose.Schema({
-  id: String,
-  status: Number,
-  events: {
-    type: Map,
-    of: {
-      port: {
-        id: String,
-        name: String,
-        port_code: String
-      },
-      planned_date: Date,
-      actual_date: Date,
-      mode: Number,
-      original_planned_date: Date
-    }
-  }
-}));
+const GocometShipload = require('../models/GocometShipload');
 const gocomet_vessel_trackings = require('../models/gocomet_vessel_trackings');
 
 class DelayService {

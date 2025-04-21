@@ -10,7 +10,13 @@ const imageExtractionService = require('./imageExtractionService');
 const geminiApi = require('./geminiApi');
 const delayService = require('./delayService');
 const emailService = require('./emailService');
+const GocometShipload = require('../models/GocometShipload');
+const GocometVesselTracking = require('../models/gocomet_vessel_trackings');
+const GocometTracking = require('../models/gocomet_trackings');
+const GocometPort = require('../models/gocomet_ports');
 // const Vessel = require('../models/VesselTracking');
+const { Binary } = require('mongodb');
+const { parse: uuidParse } = require('uuid');
 
 class IncidentService {
     async createIncident(incidentData) {
@@ -98,21 +104,12 @@ class IncidentService {
         return severityMap[severity] || 5;
     }
 
-    async calculateTotalDelay(shipmentId) {
+    async calculateTotalDelay(delay) {
         try {
-            const delays = await Delay.find({ shipment: shipmentId });
+            // console.log(delay);
             let totalDelay = 0;
-
-            for (const delay of delays) {
-                if (delay.location_type === 'port') {
-                    // Sum up delay days from all affected ports
-                    totalDelay += delay.affected_ports.reduce((sum, port) => sum + port.delay_days, 0);
-                } else {
-                    // Sum up delay days from all sea delays
-                    totalDelay += delay.sea_delays.reduce((sum, sea) => sum + sea.delay_days, 0);
-                }
-            }
-
+            totalDelay += delay.affected_ports.reduce((sum, port) => sum + port.delay_days, 0);
+            totalDelay += delay.sea_delays.reduce((sum, sea) => sum + sea.delay_days, 0);
             return totalDelay;
         } catch (error) {
             console.error('Error in calculateTotalDelay:', error);
@@ -148,25 +145,31 @@ class IncidentService {
 
     async getIncidents(user_id) {
         try {
-            // 2. Get all shipments for the user
-            const userShipments = await Shipment.find({ client_id: user_id });
-            
-            // Get all vessel tracking IDs from shipments
-            const vesselTrackingIds = userShipments.map(s => s.tracking_id);
-            
-            // Get all vessels with 'intransit' status
-            const activeVessels = await VesselTracking.find({
-                _id: { $in: vesselTrackingIds },
-                status: 'intransit'
-            });
-            
-            // Filter shipments to only include those with active vessels
-            const activeShipmentIds = userShipments
-                .filter(shipment => activeVessels.some(vessel => vessel._id.toString() === shipment.tracking_id.toString()))
-                .map(s => s._id);
-            
-            // 3. Get delays for these shipments
-            const delays = await Delay.find({ shipment: { $in: activeShipmentIds } });
+            const shipments = await User.find({ _id: user_id });
+            const user = shipments[0];
+            const shiploadsIds = user.shiploads_ids;
+
+            // Get all shipments that are in transit (status 2) using aggregation
+            const inTransitShipments = await GocometShipload.aggregate([
+                {
+                    $match: {
+                        status: 2
+                    }
+                },
+                {
+                    $addFields: {
+                        idString: { $toString: "$id" }
+                    }
+                },
+                {
+                    $match: {
+                        idString: { $in: shiploadsIds }
+                    }
+                }
+            ]);
+            const shipmentIds = inTransitShipments.map(s => s.id);
+            const delays = await Delay.find({ shipment: { $in: shipmentIds } });
+
 
             // 4. Get all unique incident IDs and port codes
             const incidentIds = new Set();
@@ -215,7 +218,7 @@ class IncidentService {
                     severity: this.getSeverityText(incident.severity),
                     status: incident.status
                 };
-
+                
                 // Add affected areas
                 if (incident.location_type === 'port') {
                     // Find ports affected by this incident through the delays
@@ -228,8 +231,8 @@ class IncidentService {
                     
                     const affectedPortCodes = affectedDelays.flatMap(delay => 
                         delay.affected_ports
-                            .filter(port => port.incidents && port.incidents.includes(incident._id))
-                            .map(port => port.port_code)
+                        .filter(port => port.incidents && port.incidents.includes(incident._id))
+                        .map(port => port.port_code)
                     );
                     
                     const affectedPorts = ports.filter(port => 
@@ -252,7 +255,7 @@ class IncidentService {
                         }
                     }];
                 }
-
+                
                 // Add affected shipments
                 const affectedDelays = delays.filter(delay => 
                     delay.location_type === incident.location_type &&
@@ -268,24 +271,52 @@ class IncidentService {
 
                 // Process each affected delay
                 for (const delay of affectedDelays) {
-                    const shipment = await Shipment.findById(delay.shipment);
-                    if (!shipment) continue;
 
-                    const vessel = await VesselTracking.findById(shipment.tracking_id);
-                    if (!vessel) continue;
+                    // Convert string UUID to Binary subtype 4
+                    const uuidBuffer = Buffer.from(uuidParse(delay.shipment)); // 16-byte buffer
+                    const uuidBinary = new Binary(uuidBuffer, Binary.SUBTYPE_UUID);
 
+                    const shipload = await GocometShipload.find({ id: uuidBinary });
+                    if (!shipload || shipload.length === 0) continue;
+
+                    const shiploadCurrentVessel = shipload[0].stats.current_event.vessel_details.vessel_name;
+
+                    const tracking_details = await GocometTracking.find({id:shipload[0].tracking_id});
+                    if (!tracking_details || tracking_details.length === 0) continue;
+                    
+                    let pol = await GocometPort.findOne({ id: tracking_details[0].pol_id});
+                    let pod = await GocometPort.findOne({ id: tracking_details[0].pod_id});
+                    
+                    if (!pol) {
+                        console.log("POL information not found for tracking:", tracking_details[0].id.toString('hex'));
+                        continue;
+                    }
+                    else if(!pod){
+                        console.log("POD information not found for tracking:", tracking_details[0].id.toString('hex'));
+                        continue;
+                    }
+                    else{
+                        console.log("Data found for tracking_id", tracking_details[0].id.toString('hex'));
+                        console.log("Port codes:", pol.code, pod.code);
+                    }
+                    
+
+                    const vessel = await GocometVesselTracking.findOne({vessel_name:shiploadCurrentVessel});
+
+                    
+                    // console.log("vessel_co_cordinates ",vessel.length);
                     formattedIncident.affected_shipments.push({
                         vessel_name: vessel.vessel_name,
-                        bill_of_lading: shipment.shipment_id,
-                        origin_port: shipment.POL,
-                        destination_port: shipment.POD,
+                        tracking_number: tracking_details[0].tracking_number,
+                        origin_port: pol.code,
+                        destination_port: pod.code,
                         impact_score: incident.severity,
-                        total_delay: `${await this.calculateTotalDelay(shipment._id)} days`,
+                        total_delay: `${await this.calculateTotalDelay(delay)} days`,
                         current_coordinates: {
                             latitude: vessel.lat_lon[0],
                             longitude: vessel.lat_lon[1]
                         },
-                        expected_time_to_reach: vessel.expected_arrival,
+                    //     // expected_time_to_reach: vessel.expected_arrival,
                         incident: incident.source_news.summary
                     });
                 }

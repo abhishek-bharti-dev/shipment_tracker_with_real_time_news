@@ -5,19 +5,47 @@ const User = require('../models/User');
 const Shipment = require('../models/Shipment');
 const Port = require('../models/Port');
 const News = require('../models/News');
+const GocometShipload = require('../models/GocometShipload')
 
 class VesselTrackingService {
     async getAllVesselsWithImpactAndDelay(user_id) {
         try {
-            // First get the user by email
-            // const user = await User.findOne({ email: userEmail });
-            // if (!user) {
-            //     throw new Error('User not found');
-            // }
+            console.log("hello buddy how are you.... ");
+            const shipments = await User.find({ _id: user_id });
+            const user = shipments[0];
+            const shiploadsIds = user.shiploads_ids;
+            // console.log(shiploadsIds);
+            // console.log("total shiploads of user",shiploadsIds.length);
+
+            // Get all shipments that are in transit (status 2) using aggregation
+            const inTransitShipments = await GocometShipload.aggregate([
+                {
+                    $match: {
+                        status: 2
+                    }
+                },
+                {
+                    $addFields: {
+                        idString: { $toString: "$id" }
+                    }
+                },
+                {
+                    $match: {
+                        idString: { $in: shiploadsIds }
+                    }
+                }
+            ]);
+            console.log("testing");
+            for(const shiploads of inTransitShipments){
+                console.log(shiploads.id);
+            }
+            return;
+
+            // console.log("in transit shipments:- ",inTransitShipments.length);
             
             // Get all the shipments associated with this user
-            const shipments = await Shipment.find({ client_id: user_id });
-            console.log("shipments: ", shipments.length);
+            // const shipments = await Shipment.find({ client_id: user_id });
+            // console.log("shipments: ", shipments.length);
 
             // Get all incidents for later use
             const incidents = await Incident.find({});

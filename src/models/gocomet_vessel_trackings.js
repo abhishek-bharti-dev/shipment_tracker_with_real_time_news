@@ -5,6 +5,10 @@ const gocometVesselTrackingSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  lat_lon: {
+    type: Array,
+    required: true
+  },
   location: {
     type: {
       type: String,

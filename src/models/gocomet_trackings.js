@@ -2,10 +2,10 @@ const mongoose = require("mongoose");
 
 const gocometTrackingSchema = new mongoose.Schema(
   {
-    id: { type: mongoose.Schema.Types.Binary, required: true },
+    id: { type: mongoose.Schema.Types.Buffer, required: true },
     carrier_code: { type: String, required: true },
-    pol_id: { type: mongoose.Schema.Types.Binary, required: true },
-    pod_id: { type: String, required: true },
+    pol_id: { type: mongoose.Schema.Types.Buffer, required: true },
+    pod_id: { type: mongoose.Schema.Types.Buffer, required: true },
     status: { type: Number, required: true },
     ops_status: { type: Number, required: true },
     tracking_number: { type: String, required: true },
