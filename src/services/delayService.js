@@ -181,6 +181,15 @@ class DelayService {
                 return;
             }
 
+            // Fetch the reason from the news table using incident.source_news
+            let reason = incident.reason || "Unknown reason";
+            if (incident.source_news) {
+                const news = await News.findById(incident.source_news).select('summary');
+                if (news && news.summary) {
+                    reason = news.summary;
+                }
+            }
+
             // Use tracking number in the payload
             const payload = {
                 userName: user.name || "Unknown User",
@@ -194,12 +203,13 @@ class DelayService {
                     {
                         portCode: portCode,
                         delayDays: delayDays,
-                        reason: incident.reason || "Unknown reason",
+                        reason: reason,
                         startDate: incident.createdAt
                     }
                 ],
                 totalDelay: delayDays
             };
+
             console.log("payload", payload);
 
             await this.sendDelayEmail(payload);
