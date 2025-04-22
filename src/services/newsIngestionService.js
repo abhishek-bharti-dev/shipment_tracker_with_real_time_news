@@ -126,8 +126,8 @@ async function processNewsItem(newsItem) {
                         port_code: portInfo.code,
                         port_name: portInfo.name,
                         lat_lon: portInfo.coordinates ? [
-                            parseFloat(portInfo.coordinates.longitude),
-                            parseFloat(portInfo.coordinates.latitude)
+                            parseFloat(portInfo.coordinates.latitude),
+                            parseFloat(portInfo.coordinates.longitude)
                         ] : []
                     });
                     await port.save();
