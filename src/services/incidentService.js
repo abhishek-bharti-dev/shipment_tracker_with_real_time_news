@@ -278,6 +278,16 @@ class IncidentService {
 
                     const shipload = await GocometShipload.find({ id: uuidBinary });
                     if (!shipload || shipload.length === 0) continue;
+                    console.log(shipload[0].containers_info);
+                    const container_details = {
+                        count: shipload[0].containers_info.size,
+                        containers: Array.from(shipload[0].containers_info.entries()).map(([key, value]) => ({
+                          container_number: key,
+                          size: value.size,
+                          type: value.type
+                        }))
+                      };
+                    console.log("container_details ",container_details);                      
 
                     const shiploadCurrentVessel = shipload[0].stats.current_event.vessel_details.vessel_name;
 
@@ -312,6 +322,7 @@ class IncidentService {
                         destination_port: pod.code,
                         impact_score: incident.severity,
                         total_delay: `${await this.calculateTotalDelay(delay)} days`,
+                        container_details: container_details,
                         current_coordinates: {
                             latitude: vessel.lat_lon[0],
                             longitude: vessel.lat_lon[1]
